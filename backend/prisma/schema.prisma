@@ -1,0 +1,42 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(uuid())
+  githubId       String    @unique
+  name           String?
+  email          String    @unique
+  githubToken    String?   // To act on behalf of the user (e.g., commit Dockerfiles)
+  projects       Project[]
+  createdAt      DateTime  @default(now())
+}
+
+model Project {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  name           String
+  repoUrl        String       // e.g., https://github.com/username/repo
+  framework      String       // e.g., "node", "react", "python"
+  subdomain      String       @unique // e.g., "my-app.bravocloud.com"
+  deployments    Deployment[]
+  createdAt      DateTime     @default(now())
+}
+
+model Deployment {
+  id             String   @id @default(uuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  status         String   // "QUEUED", "BUILDING", "SUCCESS", "FAILED"
+  commitHash     String
+  buildLogsUrl   String?  // Link to S3 bucket containing logs
+  createdAt      DateTime @default(now())
+}
