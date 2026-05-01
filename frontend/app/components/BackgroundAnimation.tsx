@@ -42,7 +42,7 @@ export default function BackgroundAnimation() {
         if (!ctx) return;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(6, 182, 212, 0.6)"; // Cyan
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)"; // White/Gray
         ctx.fill();
       }
     }
@@ -79,9 +79,9 @@ export default function BackgroundAnimation() {
             ctx.lineTo(particles[j].x, particles[j].y);
             
             // Dynamic color based on distance
-            const opacity = 0.2 * (1 - distance / 150);
-            ctx.strokeStyle = `rgba(59, 130, 246, ${opacity})`; // Blue
-            ctx.lineWidth = 1.5;
+            const opacity = 0.15 * (1 - distance / 150);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`; // White
+            ctx.lineWidth = 1.2;
             ctx.stroke();
           }
         }
