@@ -5,6 +5,8 @@ import passport from 'passport';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import githubRoutes from './routes/github';
+import projectsRoutes from './routes/projects';
+import deploymentsRoutes from './routes/deployments';
 
 dotenv.config();
 
@@ -34,11 +36,17 @@ app.use(passport.session());
 
 app.use('/auth', authRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/projects', projectsRoutes);
+app.use('/api/deployments', deploymentsRoutes);
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-  console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;

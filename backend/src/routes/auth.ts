@@ -7,21 +7,53 @@ dotenv.config();
 
 const router = Router();
 
+import { db } from '../lib/firebase';
+
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID || 'dummy_client_id',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_client_secret',
     callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:4000/auth/github/callback',
-    scope: ['repo', 'user:email']
+    scope: ['repo', 'user:email', 'workflow']
   },
-  function(accessToken: string, refreshToken: string, profile: any, done: any) {
-    const user = {
-      id: profile.id,
-      username: profile.username,
-      displayName: profile.displayName,
-      accessToken,
-      avatarUrl: profile.photos?.[0]?.value
-    };
-    return done(null, user);
+  async function(accessToken: string, refreshToken: string, profile: any, done: any) {
+    try {
+      const email = profile.emails?.[0]?.value || `${profile.username}@github.com`;
+      
+      const usersRef = db.collection('users');
+      const snapshot = await usersRef.where('githubId', '==', String(profile.id)).limit(1).get();
+
+      let dbUserId = '';
+      if (snapshot.empty) {
+        const newUserRef = await usersRef.add({
+          githubId: String(profile.id),
+          name: profile.displayName || profile.username,
+          email: email,
+          githubToken: accessToken,
+          createdAt: new Date().toISOString()
+        });
+        dbUserId = newUserRef.id;
+      } else {
+        const doc = snapshot.docs[0];
+        dbUserId = doc.id;
+        await doc.ref.update({
+          name: profile.displayName || profile.username,
+          email: email,
+          githubToken: accessToken,
+        });
+      }
+
+      const user = {
+        id: dbUserId,
+        githubId: profile.id,
+        username: profile.username,
+        displayName: profile.displayName,
+        accessToken,
+        avatarUrl: profile.photos?.[0]?.value
+      };
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
   }
 ));
 
@@ -34,7 +66,7 @@ passport.deserializeUser((user: any, done) => {
 });
 
 router.get('/github',
-  passport.authenticate('github', { scope: [ 'user:email', 'repo' ] }));
+  passport.authenticate('github', { scope: [ 'user:email', 'repo', 'workflow' ] }));
 
 router.get('/github/callback', 
   passport.authenticate('github', { failureRedirect: '/login' }),
