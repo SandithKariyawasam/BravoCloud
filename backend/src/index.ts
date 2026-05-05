@@ -39,6 +39,10 @@ app.use('/api/github', githubRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/deployments', deploymentsRoutes);
 
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });

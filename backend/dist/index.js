@@ -36,9 +36,15 @@ app.use('/auth', auth_1.default);
 app.use('/api/github', github_1.default);
 app.use('/api/projects', projects_1.default);
 app.use('/api/deployments', deployments_1.default);
+app.get('/', (req, res) => {
+    res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
+});
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
-app.listen(PORT, () => {
-    console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+    });
+}
+exports.default = app;
