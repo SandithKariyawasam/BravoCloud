@@ -12,6 +12,8 @@ const auth_1 = __importDefault(require("./routes/auth"));
 const github_1 = __importDefault(require("./routes/github"));
 const projects_1 = __importDefault(require("./routes/projects"));
 const deployments_1 = __importDefault(require("./routes/deployments"));
+const firebase_1 = require("./lib/firebase");
+const FirebaseStore = require('connect-session-firebase')(express_session_1.default);
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
@@ -20,12 +22,17 @@ app.use((0, cors_1.default)({
     credentials: true,
 }));
 app.use(express_1.default.json());
+app.set('trust proxy', 1);
 app.use((0, express_session_1.default)({
+    store: new FirebaseStore({
+        database: firebase_1.db
+    }),
     secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: true, // Required for cross-origin cookies on Vercel
+        sameSite: 'none', // Required for cross-origin cookies
         httpOnly: true,
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }

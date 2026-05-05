@@ -7,6 +7,9 @@ import authRoutes from './routes/auth';
 import githubRoutes from './routes/github';
 import projectsRoutes from './routes/projects';
 import deploymentsRoutes from './routes/deployments';
+import { db } from './lib/firebase';
+
+const FirebaseStore = require('connect-session-firebase')(session);
 
 dotenv.config();
 
@@ -20,12 +23,18 @@ app.use(cors({
 
 app.use(express.json());
 
+app.set('trust proxy', 1);
+
 app.use(session({
+  store: new FirebaseStore({
+    database: db
+  }),
   secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: true, // Required for cross-origin cookies on Vercel
+    sameSite: 'none', // Required for cross-origin cookies
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000 // 24 hours
   }
