@@ -75,8 +75,10 @@ export default function Dashboard() {
     ])
       .then(async ([reposRes, userRes, projectsRes]) => {
         if (!reposRes.ok || !userRes.ok) {
-          throw new Error("Failed to fetch core data");
+          const errorText = await userRes.text();
+          throw new Error(`Auth Error: ${userRes.status} - ${errorText}`);
         }
+        
         const reposData = await reposRes.json();
         const userData = await userRes.json();
         
@@ -85,14 +87,16 @@ export default function Dashboard() {
           projectsData = await projectsRes.json();
         }
 
-        setRepos(reposData.repos);
+        setRepos(reposData.repos || []);
         setUser(userData.user);
         setDeployedProjects(projectsData.projects || []);
         setLoading(false);
       })
       .catch((err) => {
         console.error(err);
-        window.location.href = "/";
+        alert(err.message);
+        // Temporarily disabling the redirect so you can inspect the console!
+        // window.location.href = "/";
       });
   };
 

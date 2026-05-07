@@ -44,7 +44,8 @@ passport_1.default.use(new passport_github2_1.Strategy({
                 githubToken: accessToken,
             });
         }
-        return done(null, { id: dbUserId, ...profile });
+        // Use an explicit 'dbId' field to avoid colliding with 'profile.id'
+        return done(null, { ...profile, dbId: dbUserId });
     }
     catch (err) {
         return done(err);
@@ -55,7 +56,7 @@ router.get('/github', passport_1.default.authenticate('github', { scope: ['repo'
 // GitHub OAuth Callback
 router.get('/github/callback', passport_1.default.authenticate('github', { failureRedirect: '/', session: false }), (req, res) => {
     // Generate JWT
-    const token = jsonwebtoken_1.default.sign({ id: req.user.id }, process.env.JWT_SECRET || 'bravocloud_jwt_secret', { expiresIn: '7d' });
+    const token = jsonwebtoken_1.default.sign({ id: req.user.dbId }, process.env.JWT_SECRET || 'bravocloud_jwt_secret', { expiresIn: '7d' });
     // Redirect to frontend with token
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?token=${token}`);
 });

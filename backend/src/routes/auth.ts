@@ -46,7 +46,8 @@ passport.use(new GitHubStrategy({
         });
       }
 
-      return done(null, { id: dbUserId, ...profile });
+      // Use an explicit 'dbId' field to avoid colliding with 'profile.id'
+      return done(null, { ...profile, dbId: dbUserId });
     } catch (err) {
       return done(err);
     }
@@ -62,7 +63,7 @@ router.get('/github/callback',
   (req, res) => {
     // Generate JWT
     const token = jwt.sign(
-      { id: (req.user as any).id }, 
+      { id: (req.user as any).dbId }, 
       process.env.JWT_SECRET || 'bravocloud_jwt_secret', 
       { expiresIn: '7d' }
     );
