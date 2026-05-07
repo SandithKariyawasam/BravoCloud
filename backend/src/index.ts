@@ -37,6 +37,17 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Global error handler for debugging
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('Fatal Error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: err.message || String(err),
+    oauth_details: err.oauthError ? err.oauthError.data : null,
+    stack: process.env.NODE_ENV === 'production' ? 'hidden' : err.stack
+  });
+});
+
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
