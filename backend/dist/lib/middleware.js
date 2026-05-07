@@ -17,13 +17,13 @@ const verifyToken = async (req, res, next) => {
         // Fetch fresh user data from Firestore
         const userDoc = await firebase_1.db.collection('users').doc(decoded.id).get();
         if (!userDoc.exists) {
-            return res.status(401).json({ error: 'User not found' });
+            return res.status(401).json({ error: 'User not found in database', id: decoded.id });
         }
         req.user = { id: userDoc.id, ...userDoc.data() };
         next();
     }
     catch (error) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
+        return res.status(401).json({ error: 'Token verification failed', details: error.message || String(error) });
     }
 };
 exports.verifyToken = verifyToken;

@@ -18,12 +18,12 @@ export const verifyToken = async (req: Request, res: Response, next: NextFunctio
     const userDoc = await db.collection('users').doc(decoded.id).get();
     
     if (!userDoc.exists) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ error: 'User not found in database', id: decoded.id });
     }
 
     req.user = { id: userDoc.id, ...userDoc.data() };
     next();
-  } catch (error) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  } catch (error: any) {
+    return res.status(401).json({ error: 'Token verification failed', details: error.message || String(error) });
   }
 };
