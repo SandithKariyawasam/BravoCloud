@@ -11,11 +11,13 @@ const router = Router();
 
 import { db } from '../lib/firebase';
 
+// We pass a relative path so passport dynamically resolves the domain!
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID || 'dummy_client_id',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_client_secret',
-    callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:4000/auth/github/callback',
-    scope: ['repo', 'user:email', 'workflow']
+    callbackURL: process.env.GITHUB_CALLBACK_URL || '/auth/github/callback',
+    scope: ['repo', 'user:email', 'workflow'],
+    proxy: true // Trust the x-forwarded-proto header from Vercel
   },
   async function(accessToken: string, refreshToken: string, profile: any, done: any) {
     try {
@@ -51,10 +53,10 @@ passport.use(new GitHubStrategy({
   }
 ));
 
-router.get('/github',
-  passport.authenticate('github', { scope: ['repo', 'user:email', 'workflow'], session: false })
-);
+// Initiate GitHub OAuth
+router.get('/github', passport.authenticate('github', { scope: ['repo', 'user:email', 'workflow'] }));
 
+// GitHub OAuth Callback
 router.get('/github/callback', 
   passport.authenticate('github', { failureRedirect: '/', session: false }),
   (req, res) => {

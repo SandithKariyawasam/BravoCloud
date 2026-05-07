@@ -42,10 +42,12 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
     "Authorization": `Bearer ${localStorage.getItem("bravocloud_token")}`
   });
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
   // Fetch branches
   useEffect(() => {
     setLoadingBranches(true);
-    fetch(`https://bravo-cloud-ydew.vercel.app/api/github/repos/${repo.fullName}/branches`, { headers: getHeaders() })
+    fetch(`${apiUrl}/api/github/repos/${repo.fullName}/branches`, { headers: getHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.branches) {
@@ -76,7 +78,7 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
         // Attempt to fetch package.json from our backend to support private repositories
         const pathStr = rootDir === './' ? 'package.json' : `${rootDir.substring(1)}/package.json`;
         
-        fetch(`https://bravo-cloud-ydew.vercel.app/api/github/repos/${repo.fullName}/branches/${selectedBranch || 'main'}/contents?path=${encodeURIComponent(pathStr)}`, { headers: getHeaders() })
+        fetch(`${apiUrl}/api/github/repos/${repo.fullName}/branches/${selectedBranch || 'main'}/contents?path=${encodeURIComponent(pathStr)}`, { headers: getHeaders() })
           .then(res => {
             if (!res.ok) throw new Error("Not found");
             return res.json();
@@ -107,7 +109,7 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
       // But we will just try anyway. If it fails, no harm.
     }
     setLoadingDirs(true);
-    fetch(`https://bravo-cloud-ydew.vercel.app/api/github/repos/${repo.fullName}/branches/${selectedBranch}/directories`, { headers: getHeaders() })
+    fetch(`${apiUrl}/api/github/repos/${repo.fullName}/branches/${selectedBranch}/directories`, { headers: getHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.directories) {
@@ -169,7 +171,7 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
       });
       if (Object.keys(envs).length > 0) payload.envVars = envs;
 
-      const response = await fetch('https://bravo-cloud-ydew.vercel.app/api/projects', {
+      const response = await fetch(`${apiUrl}/api/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -7,7 +7,7 @@ import { verifyToken } from '../lib/middleware';
 
 router.get('/repos', verifyToken, async (req: any, res: any) => {
   try {
-    const octokit = new Octokit({ auth: req.user.accessToken });
+    const octokit = new Octokit({ auth: req.user.githubToken });
     
     const response = await octokit.rest.repos.listForAuthenticatedUser({
       sort: 'updated',
@@ -37,7 +37,7 @@ router.get('/repos', verifyToken, async (req: any, res: any) => {
 router.get('/repos/:owner/:repo/branches', verifyToken, async (req: any, res: any) => {
   try {
     const { owner, repo } = req.params;
-    const octokit = new Octokit({ auth: req.user.accessToken });
+    const octokit = new Octokit({ auth: req.user.githubToken });
     
     const response = await octokit.rest.repos.listBranches({
       owner,
@@ -61,7 +61,7 @@ router.get('/repos/:owner/:repo/branches', verifyToken, async (req: any, res: an
 router.get('/repos/:owner/:repo/branches/:branch/directories', verifyToken, async (req: any, res: any) => {
   try {
     const { owner, repo, branch } = req.params;
-    const octokit = new Octokit({ auth: req.user.accessToken });
+    const octokit = new Octokit({ auth: req.user.githubToken });
     
     // First, get the commit SHA for the branch
     const branchData = await octokit.rest.repos.getBranch({
@@ -103,7 +103,7 @@ router.get('/repos/:owner/:repo/branches/:branch/contents', verifyToken, async (
       return res.status(400).json({ error: 'Path query parameter is required' });
     }
 
-    const octokit = new Octokit({ auth: req.user.accessToken });
+    const octokit = new Octokit({ auth: req.user.githubToken });
     
     const { data } = await octokit.rest.repos.getContent({
       owner,

@@ -66,11 +66,12 @@ export default function Dashboard() {
     setLoading(true);
     
     const headers = { "Authorization": `Bearer ${token}` };
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     
     Promise.all([
-      fetch("https://bravo-cloud-ydew.vercel.app/api/github/repos", { headers }),
-      fetch("https://bravo-cloud-ydew.vercel.app/auth/me", { headers }),
-      fetch("https://bravo-cloud-ydew.vercel.app/api/projects", { headers })
+      fetch(`${apiUrl}/api/github/repos`, { headers }),
+      fetch(`${apiUrl}/auth/me`, { headers }),
+      fetch(`${apiUrl}/api/projects`, { headers })
     ])
       .then(async ([reposRes, userRes, projectsRes]) => {
         if (!reposRes.ok || !userRes.ok) {
@@ -98,7 +99,8 @@ export default function Dashboard() {
   const handleLogout = async () => {
     try {
       localStorage.removeItem("bravocloud_token");
-      await fetch("https://bravo-cloud-ydew.vercel.app/auth/logout", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      await fetch(`${apiUrl}/auth/logout`, {
         method: "POST"
       });
       window.location.href = "/";
@@ -322,7 +324,8 @@ export default function Dashboard() {
           onClose={() => {
             setSelectedRepo(null);
             setDashboardView("projects");
-            fetchDashboardData(); // Refresh the list of deployed projects
+            const token = localStorage.getItem("bravocloud_token");
+            if (token) fetchDashboardData(token); // Refresh the list of deployed projects
           }}
         />
       )}

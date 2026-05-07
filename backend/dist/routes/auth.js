@@ -12,11 +12,13 @@ const middleware_1 = require("../lib/middleware");
 dotenv_1.default.config();
 const router = (0, express_1.Router)();
 const firebase_1 = require("../lib/firebase");
+// We pass a relative path so passport dynamically resolves the domain!
 passport_1.default.use(new passport_github2_1.Strategy({
     clientID: process.env.GITHUB_CLIENT_ID || 'dummy_client_id',
     clientSecret: process.env.GITHUB_CLIENT_SECRET || 'dummy_client_secret',
-    callbackURL: process.env.GITHUB_CALLBACK_URL || 'http://localhost:4000/auth/github/callback',
-    scope: ['repo', 'user:email', 'workflow']
+    callbackURL: process.env.GITHUB_CALLBACK_URL || '/auth/github/callback',
+    scope: ['repo', 'user:email', 'workflow'],
+    proxy: true // Trust the x-forwarded-proto header from Vercel
 }, async function (accessToken, refreshToken, profile, done) {
     try {
         const email = profile.emails?.[0]?.value || `${profile.username}@github.com`;
@@ -48,7 +50,9 @@ passport_1.default.use(new passport_github2_1.Strategy({
         return done(err);
     }
 }));
-router.get('/github', passport_1.default.authenticate('github', { scope: ['repo', 'user:email', 'workflow'], session: false }));
+// Initiate GitHub OAuth
+router.get('/github', passport_1.default.authenticate('github', { scope: ['repo', 'user:email', 'workflow'] }));
+// GitHub OAuth Callback
 router.get('/github/callback', passport_1.default.authenticate('github', { failureRedirect: '/', session: false }), (req, res) => {
     // Generate JWT
     const token = jsonwebtoken_1.default.sign({ id: req.user.id }, process.env.JWT_SECRET || 'bravocloud_jwt_secret', { expiresIn: '7d' });
