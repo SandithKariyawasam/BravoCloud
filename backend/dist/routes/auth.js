@@ -21,7 +21,8 @@ passport_1.default.use(new passport_github2_1.Strategy({
     proxy: true // Trust the x-forwarded-proto header from Vercel
 }, async function (accessToken, refreshToken, profile, done) {
     try {
-        const email = profile.emails?.[0]?.value || `${profile.username}@github.com`;
+        const email = profile.emails && profile.emails.length > 0 ? profile.emails[0].value : null;
+        const avatarUrl = profile.photos && profile.photos.length > 0 ? profile.photos[0].value : null;
         const usersRef = firebase_1.db.collection('users');
         const snapshot = await usersRef.where('githubId', '==', String(profile.id)).limit(1).get();
         let dbUserId = '';
@@ -29,6 +30,8 @@ passport_1.default.use(new passport_github2_1.Strategy({
             const newUserRef = await usersRef.add({
                 githubId: String(profile.id),
                 name: profile.displayName || profile.username,
+                username: profile.username,
+                avatarUrl: avatarUrl,
                 email: email,
                 githubToken: accessToken,
                 createdAt: new Date().toISOString()
@@ -40,6 +43,8 @@ passport_1.default.use(new passport_github2_1.Strategy({
             dbUserId = doc.id;
             await doc.ref.update({
                 name: profile.displayName || profile.username,
+                username: profile.username,
+                avatarUrl: avatarUrl,
                 email: email,
                 githubToken: accessToken,
             });
