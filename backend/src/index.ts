@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
@@ -8,8 +7,6 @@ import githubRoutes from './routes/github';
 import projectsRoutes from './routes/projects';
 import deploymentsRoutes from './routes/deployments';
 import { db } from './lib/firebase';
-
-const { FirestoreStore } = require('@google-cloud/connect-firestore');
 
 dotenv.config();
 
@@ -25,24 +22,7 @@ app.use(express.json());
 
 app.set('trust proxy', 1);
 
-app.use(session({
-  store: new FirestoreStore({
-    dataset: db,
-    kind: 'express-sessions',
-  }),
-  secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true, // Required for cross-origin cookies on Vercel
-    sameSite: 'none', // Required for cross-origin cookies
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-
 app.use(passport.initialize());
-app.use(passport.session());
 
 app.use('/auth', authRoutes);
 app.use('/api/github', githubRoutes);

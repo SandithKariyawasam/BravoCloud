@@ -42,15 +42,35 @@ export default function Dashboard() {
   );
 
   useEffect(() => {
-    fetchDashboardData();
+    let token = localStorage.getItem("bravocloud_token");
+    
+    // Check if token is in URL (redirect from OAuth)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get("token");
+    
+    if (urlToken) {
+      token = urlToken;
+      localStorage.setItem("bravocloud_token", urlToken);
+      window.history.replaceState({}, document.title, "/dashboard");
+    }
+
+    if (!token) {
+      window.location.href = "/";
+      return;
+    }
+
+    fetchDashboardData(token);
   }, []);
 
-  const fetchDashboardData = () => {
+  const fetchDashboardData = (token: string) => {
     setLoading(true);
+    
+    const headers = { "Authorization": `Bearer ${token}` };
+    
     Promise.all([
-      fetch("https://bravo-cloud-ydew.vercel.app/api/github/repos", { credentials: "include" }),
-      fetch("https://bravo-cloud-ydew.vercel.app/auth/me", { credentials: "include" }),
-      fetch("https://bravo-cloud-ydew.vercel.app/api/projects", { credentials: "include" })
+      fetch("https://bravo-cloud-ydew.vercel.app/api/github/repos", { headers }),
+      fetch("https://bravo-cloud-ydew.vercel.app/auth/me", { headers }),
+      fetch("https://bravo-cloud-ydew.vercel.app/api/projects", { headers })
     ])
       .then(async ([reposRes, userRes, projectsRes]) => {
         if (!reposRes.ok || !userRes.ok) {
@@ -77,9 +97,9 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem("bravocloud_token");
       await fetch("https://bravo-cloud-ydew.vercel.app/auth/logout", {
-        method: "POST",
-        credentials: "include"
+        method: "POST"
       });
       window.location.href = "/";
     } catch (error) {

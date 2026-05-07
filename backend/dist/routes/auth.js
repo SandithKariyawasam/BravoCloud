@@ -6,7 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const passport_1 = __importDefault(require("passport"));
 const passport_github2_1 = require("passport-github2");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const middleware_1 = require("../lib/middleware");
 dotenv_1.default.config();
 const router = (0, express_1.Router)();
 const firebase_1 = require("../lib/firebase");
@@ -40,46 +42,23 @@ passport_1.default.use(new passport_github2_1.Strategy({
                 githubToken: accessToken,
             });
         }
-        const user = {
-            id: dbUserId,
-            githubId: profile.id,
-            username: profile.username,
-            displayName: profile.displayName,
-            accessToken,
-            avatarUrl: profile.photos?.[0]?.value
-        };
-        return done(null, user);
+        return done(null, { id: dbUserId, ...profile });
     }
     catch (err) {
         return done(err);
     }
 }));
-passport_1.default.serializeUser((user, done) => {
-    done(null, user);
+router.get('/github', passport_1.default.authenticate('github', { scope: ['repo', 'user:email', 'workflow'], session: false }));
+router.get('/github/callback', passport_1.default.authenticate('github', { failureRedirect: '/', session: false }), (req, res) => {
+    // Generate JWT
+    const token = jsonwebtoken_1.default.sign({ id: req.user.id }, process.env.JWT_SECRET || 'bravocloud_jwt_secret', { expiresIn: '7d' });
+    // Redirect to frontend with token
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?token=${token}`);
 });
-passport_1.default.deserializeUser((user, done) => {
-    done(null, user);
+router.get('/me', middleware_1.verifyToken, async (req, res) => {
+    res.json({ user: req.user });
 });
-router.get('/github', passport_1.default.authenticate('github', { scope: ['user:email', 'repo', 'workflow'] }));
-router.get('/github/callback', passport_1.default.authenticate('github', { failureRedirect: '/login' }), function (req, res) {
-    res.redirect((process.env.FRONTEND_URL || 'http://localhost:3000') + '/dashboard');
-});
-router.get('/me', (req, res) => {
-    if (req.isAuthenticated()) {
-        // Don't send the access token to the frontend for security
-        const { accessToken, ...safeUser } = req.user;
-        res.json({ user: safeUser });
-    }
-    else {
-        res.status(401).json({ error: 'Unauthorized' });
-    }
-});
-router.post('/logout', (req, res, next) => {
-    req.logout((err) => {
-        if (err) {
-            return next(err);
-        }
-        res.json({ success: true });
-    });
+router.post('/logout', (req, res) => {
+    res.json({ success: true, message: 'Logged out' });
 });
 exports.default = router;

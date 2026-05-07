@@ -3,14 +3,9 @@ import { Octokit } from '@octokit/rest';
 
 const router = Router();
 
-const requireAuth = (req: any, res: any, next: any) => {
-  if (!req.isAuthenticated() || !req.user?.accessToken) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
+import { verifyToken } from '../lib/middleware';
 
-router.get('/repos', requireAuth, async (req: any, res: any) => {
+router.get('/repos', verifyToken, async (req: any, res: any) => {
   try {
     const octokit = new Octokit({ auth: req.user.accessToken });
     
@@ -39,7 +34,7 @@ router.get('/repos', requireAuth, async (req: any, res: any) => {
   }
 });
 
-router.get('/repos/:owner/:repo/branches', requireAuth, async (req: any, res: any) => {
+router.get('/repos/:owner/:repo/branches', verifyToken, async (req: any, res: any) => {
   try {
     const { owner, repo } = req.params;
     const octokit = new Octokit({ auth: req.user.accessToken });
@@ -63,7 +58,7 @@ router.get('/repos/:owner/:repo/branches', requireAuth, async (req: any, res: an
   }
 });
 
-router.get('/repos/:owner/:repo/branches/:branch/directories', requireAuth, async (req: any, res: any) => {
+router.get('/repos/:owner/:repo/branches/:branch/directories', verifyToken, async (req: any, res: any) => {
   try {
     const { owner, repo, branch } = req.params;
     const octokit = new Octokit({ auth: req.user.accessToken });
@@ -99,7 +94,7 @@ router.get('/repos/:owner/:repo/branches/:branch/directories', requireAuth, asyn
   }
 });
 
-router.get('/repos/:owner/:repo/branches/:branch/contents', requireAuth, async (req: any, res: any) => {
+router.get('/repos/:owner/:repo/branches/:branch/contents', verifyToken, async (req: any, res: any) => {
   try {
     const { owner, repo, branch } = req.params;
     const { path } = req.query; // e.g. "frontend/package.json" or "package.json"

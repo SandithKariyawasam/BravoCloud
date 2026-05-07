@@ -6,16 +6,10 @@ import { createEcrRepository } from '../lib/aws';
 
 const router = Router();
 
-// Middleware to ensure user is authenticated
-const requireAuth = (req: any, res: any, next: any) => {
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  next();
-};
+import { verifyToken } from '../lib/middleware';
 
 // Create a new project
-router.post('/', requireAuth, async (req: any, res: any) => {
+router.post('/', verifyToken, async (req: any, res: any) => {
   try {
     const { 
       name, 
@@ -179,7 +173,7 @@ router.post('/', requireAuth, async (req: any, res: any) => {
 });
 
 // Get user's projects
-router.get('/', requireAuth, async (req: any, res: any) => {
+router.get('/', verifyToken, async (req: any, res: any) => {
   try {
     const userId = req.user.id;
     
