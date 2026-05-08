@@ -98,7 +98,11 @@ router.post('/', verifyToken, async (req: any, res: any) => {
     }
 
     // Generate files
-    const webhookUrl = `${process.env.BACKEND_URL || 'http://localhost:4000'}/api/deployments/webhook`;
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers.host;
+    const dynamicBackendUrl = `${protocol}://${host}`;
+    const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
+    
     const dockerfileContent = generateDockerfile(framework, installCommand, buildCommand, outputDirectory);
     const workflowContent = generateWorkflow(webhookUrl, projectRef.id, deploymentRef.id, ecrUri, branch, rootDir);
 
@@ -110,6 +114,10 @@ router.post('/', verifyToken, async (req: any, res: any) => {
 
     const filesToCommit = [
       { path: dockerfilePath, content: dockerfileContent },
+      { 
+        path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore', 
+        content: 'node_modules\n.next\n.git\n.env*\n' 
+      },
       { path: '.github/workflows/bravocloud.yml', content: workflowContent }
     ];
 

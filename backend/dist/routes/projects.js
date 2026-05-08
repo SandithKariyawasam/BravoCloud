@@ -79,7 +79,10 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
             return res.status(500).json({ error: 'Failed to provision AWS infrastructure' });
         }
         // Generate files
-        const webhookUrl = `${process.env.BACKEND_URL || 'http://localhost:4000'}/api/deployments/webhook`;
+        const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+        const host = req.headers.host;
+        const dynamicBackendUrl = `${protocol}://${host}`;
+        const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
         const dockerfileContent = (0, templates_1.generateDockerfile)(framework, installCommand, buildCommand, outputDirectory);
         const workflowContent = (0, templates_1.generateWorkflow)(webhookUrl, projectRef.id, deploymentRef.id, ecrUri, branch, rootDir);
         // Make sure Dockerfile goes into the correct root directory
@@ -89,6 +92,10 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
         }
         const filesToCommit = [
             { path: dockerfilePath, content: dockerfileContent },
+            {
+                path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore',
+                content: 'node_modules\n.next\n.git\n.env*\n'
+            },
             { path: '.github/workflows/bravocloud.yml', content: workflowContent }
         ];
         let finalDeploymentData = { ...deploymentData };
