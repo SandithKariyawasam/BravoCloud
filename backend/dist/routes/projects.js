@@ -240,7 +240,7 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
                 }
                 catch (secretErr) { }
             }
-            await (0, github_1.commitProjectFiles)(user.githubToken, repoOwner, repoName, filesToCommit, `Redeploy BravoCloud project ${projectData.name}`);
+            await (0, github_1.commitProjectFiles)(user.githubToken, repoOwner, repoName, filesToCommit, projectData.branch || 'main', `Redeploy BravoCloud project ${projectData.name}`);
         }
         catch (githubError) {
             console.error('Failed to commit redeploy files:', githubError);

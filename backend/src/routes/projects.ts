@@ -299,6 +299,7 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
         repoOwner,
         repoName,
         filesToCommit,
+        projectData.branch || 'main',
         `Redeploy BravoCloud project ${projectData.name}`
       );
     } catch (githubError) {
