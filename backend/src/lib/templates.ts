@@ -6,7 +6,7 @@ export function generateDockerfile(framework: string, installCmd?: string, build
 
   if (normalized.includes('next.js')) {
     return `# Next.js Dockerfile
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -38,7 +38,7 @@ CMD ["node", "server.js"]
   if (normalized.includes('react') || normalized.includes('vite') || normalized.includes('vue') || normalized.includes('svelte') || normalized.includes('angular')) {
     const finalOutputDir = outputDir || 'dist';
     return `# Static Site Dockerfile
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 RUN ${finalInstallCmd}
