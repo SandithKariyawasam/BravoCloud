@@ -33,6 +33,7 @@ export default function Dashboard() {
   const [dashboardView, setDashboardView] = useState<"projects" | "import">("projects");
   const [deployedProjects, setDeployedProjects] = useState<any[]>([]); // Mock state for now
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
+  const [redeployingProjectId, setRedeployingProjectId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -98,6 +99,31 @@ export default function Dashboard() {
         // Temporarily disabling the redirect so you can inspect the console!
         // window.location.href = "/";
       });
+  };
+
+  const handleRedeploy = async (projectId: string) => {
+    setRedeployingProjectId(projectId);
+    try {
+      const token = localStorage.getItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/redeploy`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to redeploy");
+      }
+      
+      // Refresh dashboard data to show QUEUED status
+      if (token) fetchDashboardData(token);
+    } catch (error: any) {
+      alert("Redeploy failed: " + error.message);
+    } finally {
+      setRedeployingProjectId(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -202,9 +228,31 @@ export default function Dashboard() {
                             <span className="text-xs text-[#71717a]">
                               Created {new Date(project.createdAt).toLocaleDateString()}
                             </span>
-                            <a href={project.subdomain ? `https://${project.subdomain}` : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
-                              Visit Site
-                            </a>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRedeploy(project.id)}
+                                disabled={redeployingProjectId === project.id}
+                                className="text-xs font-semibold px-3 py-1.5 bg-[#27272a] text-white rounded-lg hover:bg-[#3f3f46] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {redeployingProjectId === project.id ? (
+                                  <>
+                                    <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Redeploying...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                    Redeploy
+                                  </>
+                                )}
+                              </button>
+                              <a href={project.subdomain ? `https://${project.subdomain}` : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
+                                Visit Site
+                              </a>
+                            </div>
                           </div>
                         </div>
                       );

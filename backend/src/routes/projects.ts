@@ -213,4 +213,105 @@ router.get('/', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// Redeploy an existing project
+router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    // Fetch project
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    const projectData = projectDoc.data() as any;
+
+    if (projectData.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Fetch user for GitHub Token
+    const userDoc = await db.collection('users').doc(userId).get();
+    const user = userDoc.data() as any;
+
+    // Create new deployment
+    const deploymentRef = db.collection('deployments').doc();
+    const deploymentData = {
+      id: deploymentRef.id,
+      projectId: projectData.id,
+      status: 'QUEUED',
+      commitHash: 'redeploy-trigger',
+      createdAt: new Date().toISOString()
+    };
+    await deploymentRef.set(deploymentData);
+
+    // Parse repo owner/name
+    const urlParts = new URL(projectData.repoUrl).pathname.split('/').filter(Boolean);
+    const repoOwner = urlParts[0];
+    const repoName = urlParts[1];
+
+    // Get ECR URI gracefully (returns existing without error)
+    let ecrUri = '';
+    try {
+      ecrUri = await createEcrRepository(projectData.name);
+    } catch (awsError) {
+      console.error('Failed to get AWS ECR Repository:', awsError);
+      return res.status(500).json({ error: 'Failed to access AWS infrastructure' });
+    }
+
+    // Generate files
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers.host;
+    const dynamicBackendUrl = `${protocol}://${host}`;
+    const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
+    
+    const dockerfileContent = generateDockerfile(projectData.framework, projectData.installCommand, projectData.buildCommand, projectData.outputDirectory);
+    const workflowContent = generateWorkflow(webhookUrl, projectData.id, deploymentRef.id, ecrUri, projectData.branch || 'main', projectData.rootDir || './');
+
+    let dockerfilePath = 'Dockerfile';
+    const rootDir = projectData.rootDir || './';
+    if (rootDir !== './') {
+      dockerfilePath = `${rootDir.substring(2)}/Dockerfile`;
+    }
+
+    const filesToCommit = [
+      { path: dockerfilePath, content: dockerfileContent },
+      { 
+        path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore', 
+        content: 'node_modules\n.next\n.git\n.env*\n' 
+      },
+      { path: '.github/workflows/bravocloud.yml', content: workflowContent }
+    ];
+
+    // Push files to GitHub
+    try {
+      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+        try {
+          await setupRepositorySecrets(user.githubToken, repoOwner, repoName, {
+            AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+            AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY
+          });
+        } catch (secretErr) {}
+      }
+      
+      await commitProjectFiles(
+        user.githubToken,
+        repoOwner,
+        repoName,
+        filesToCommit,
+        `Redeploy BravoCloud project ${projectData.name}`
+      );
+    } catch (githubError) {
+      console.error('Failed to commit redeploy files:', githubError);
+      await deploymentRef.update({ status: 'FAILED' });
+      return res.status(500).json({ error: 'Failed to trigger redeployment on GitHub' });
+    }
+
+    res.json({ message: 'Redeployment triggered successfully', deployment: deploymentData });
+  } catch (error) {
+    console.error('Error redeploying project:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
