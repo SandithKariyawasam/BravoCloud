@@ -29,7 +29,7 @@ router.post('/webhook', async (req, res) => {
                     // Generate the expected ECR URI format to pass to App Runner
                     // In production, you would fetch this using DescribeRepositories or pass it in the webhook
                     const region = process.env.AWS_REGION || "us-east-1";
-                    const accountId = process.env.AWS_ACCOUNT_ID || "123456789012";
+                    const accountId = process.env.AWS_ACCOUNT_ID || await (0, aws_1.getAwsAccountId)();
                     const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
                     const envs = project.envVars ? project.envVars : undefined;
                     const appRunnerUrl = await (0, aws_1.deployToAppRunner)(project.name, imageUri, envs);
