@@ -2,7 +2,7 @@ import { ECRClient, CreateRepositoryCommand, DescribeRepositoriesCommand } from 
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { IAMClient, GetRoleCommand, CreateRoleCommand, AttachRolePolicyCommand } from "@aws-sdk/client-iam";
 import { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand, CreateSecurityGroupCommand, AuthorizeSecurityGroupIngressCommand, DescribeSecurityGroupsCommand, DescribeNetworkInterfacesCommand } from "@aws-sdk/client-ec2";
-import { ECSClient, CreateClusterCommand, RegisterTaskDefinitionCommand, RunTaskCommand, DescribeTasksCommand } from "@aws-sdk/client-ecs";
+import { ECSClient, CreateClusterCommand, RegisterTaskDefinitionCommand, CreateServiceCommand, ListTasksCommand, DescribeTasksCommand } from "@aws-sdk/client-ecs";
 
 const region = process.env.AWS_REGION || "us-east-1";
 
@@ -180,11 +180,15 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   // 4. Get Network Config
   const { subnets, sgId } = await getNetworkConfiguration(port);
 
-  // 5. Run Task
-  const runTaskRes = await ecsClient.send(new RunTaskCommand({
+  const serviceName = `bravocloud-service-${sanitizedName}`;
+
+  // 5. Create Service
+  await ecsClient.send(new CreateServiceCommand({
     cluster: clusterName,
+    serviceName: serviceName,
     taskDefinition: taskDefArn,
     launchType: "FARGATE",
+    desiredCount: 1,
     networkConfiguration: {
       awsvpcConfiguration: {
         subnets: subnets,
@@ -194,8 +198,21 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
     }
   }));
 
-  const taskArn = runTaskRes.tasks?.[0]?.taskArn;
-  if (!taskArn) throw new Error("Failed to run ECS task");
+  // Wait for Service to spin up a task and get taskArn
+  let taskArn = "";
+  for (let i = 0; i < 15; i++) {
+    await new Promise(res => setTimeout(res, 3000));
+    const listTasksRes = await ecsClient.send(new ListTasksCommand({
+      cluster: clusterName,
+      serviceName: serviceName
+    }));
+    if (listTasksRes.taskArns && listTasksRes.taskArns.length > 0) {
+      taskArn = listTasksRes.taskArns[0];
+      break;
+    }
+  }
+
+  if (!taskArn) throw new Error("Failed to list ECS task for service");
 
   // 6. Wait for Task ENI attachment
   let eniId = "";

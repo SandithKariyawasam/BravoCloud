@@ -161,11 +161,14 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
         throw new Error("Failed to register task definition");
     // 4. Get Network Config
     const { subnets, sgId } = await getNetworkConfiguration(port);
-    // 5. Run Task
-    const runTaskRes = await ecsClient.send(new client_ecs_1.RunTaskCommand({
+    const serviceName = `bravocloud-service-${sanitizedName}`;
+    // 5. Create Service
+    await ecsClient.send(new client_ecs_1.CreateServiceCommand({
         cluster: clusterName,
+        serviceName: serviceName,
         taskDefinition: taskDefArn,
         launchType: "FARGATE",
+        desiredCount: 1,
         networkConfiguration: {
             awsvpcConfiguration: {
                 subnets: subnets,
@@ -174,9 +177,21 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
             }
         }
     }));
-    const taskArn = runTaskRes.tasks?.[0]?.taskArn;
+    // Wait for Service to spin up a task and get taskArn
+    let taskArn = "";
+    for (let i = 0; i < 15; i++) {
+        await new Promise(res => setTimeout(res, 3000));
+        const listTasksRes = await ecsClient.send(new client_ecs_1.ListTasksCommand({
+            cluster: clusterName,
+            serviceName: serviceName
+        }));
+        if (listTasksRes.taskArns && listTasksRes.taskArns.length > 0) {
+            taskArn = listTasksRes.taskArns[0];
+            break;
+        }
+    }
     if (!taskArn)
-        throw new Error("Failed to run ECS task");
+        throw new Error("Failed to list ECS task for service");
     // 6. Wait for Task ENI attachment
     let eniId = "";
     for (let i = 0; i < 15; i++) {
