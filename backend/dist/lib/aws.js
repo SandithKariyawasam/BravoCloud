@@ -2,23 +2,25 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAwsAccountId = getAwsAccountId;
 exports.createEcrRepository = createEcrRepository;
-exports.deployToAppRunner = deployToAppRunner;
+exports.deployToECS = deployToECS;
 const client_ecr_1 = require("@aws-sdk/client-ecr");
-const client_apprunner_1 = require("@aws-sdk/client-apprunner");
 const client_sts_1 = require("@aws-sdk/client-sts");
 const client_iam_1 = require("@aws-sdk/client-iam");
+const client_ec2_1 = require("@aws-sdk/client-ec2");
+const client_ecs_1 = require("@aws-sdk/client-ecs");
 const region = process.env.AWS_REGION || "us-east-1";
 // Ensure AWS credentials are set in .env
 const ecrClient = new client_ecr_1.ECRClient({ region });
-const appRunnerClient = new client_apprunner_1.AppRunnerClient({ region });
 const stsClient = new client_sts_1.STSClient({ region });
 const iamClient = new client_iam_1.IAMClient({ region });
+const ec2Client = new client_ec2_1.EC2Client({ region });
+const ecsClient = new client_ecs_1.ECSClient({ region });
 async function getAwsAccountId() {
     const response = await stsClient.send(new client_sts_1.GetCallerIdentityCommand({}));
     return response.Account || "";
 }
-async function getOrCreateAppRunnerRole() {
-    const roleName = "AppRunnerECRAccessRole";
+async function getOrCreateEcsExecutionRole() {
+    const roleName = "ecsTaskExecutionRole";
     try {
         const roleResponse = await iamClient.send(new client_iam_1.GetRoleCommand({ RoleName: roleName }));
         return roleResponse.Role?.Arn || "";
@@ -35,7 +37,7 @@ async function getOrCreateAppRunnerRole() {
             {
                 Effect: "Allow",
                 Principal: {
-                    Service: ["build.apprunner.amazonaws.com", "tasks.apprunner.amazonaws.com"]
+                    Service: "ecs-tasks.amazonaws.com"
                 },
                 Action: "sts:AssumeRole"
             }
@@ -48,15 +50,12 @@ async function getOrCreateAppRunnerRole() {
     const roleArn = createRoleRes.Role?.Arn;
     await iamClient.send(new client_iam_1.AttachRolePolicyCommand({
         RoleName: roleName,
-        PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
+        PolicyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
     }));
     // Wait for IAM propagation
     await new Promise(resolve => setTimeout(resolve, 10000));
     return roleArn || "";
 }
-/**
- * Creates an ECR repository if it doesn't exist and returns its URI.
- */
 async function createEcrRepository(projectName) {
     const repoName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
     try {
@@ -83,38 +82,126 @@ async function createEcrRepository(projectName) {
     }
     return createResponse.repository.repositoryUri;
 }
-/**
- * Creates an AWS App Runner service for the given image URI.
- * Note: Assumes an IAM role "AppRunnerECRAccessRole" exists in the account.
- */
-async function deployToAppRunner(projectName, imageUri, envVars, port = "3000") {
-    const serviceName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
-    const imageConfig = { Port: port };
-    if (envVars && Object.keys(envVars).length > 0) {
-        imageConfig.RuntimeEnvironmentVariables = envVars;
+async function getNetworkConfiguration(port) {
+    // 1. Get Default VPC
+    const vpcRes = await ec2Client.send(new client_ec2_1.DescribeVpcsCommand({
+        Filters: [{ Name: "isDefault", Values: ["true"] }]
+    }));
+    const vpcId = vpcRes.Vpcs?.[0]?.VpcId;
+    if (!vpcId)
+        throw new Error("No default VPC found");
+    // 2. Get Subnets for VPC
+    const subnetRes = await ec2Client.send(new client_ec2_1.DescribeSubnetsCommand({
+        Filters: [{ Name: "vpc-id", Values: [vpcId] }]
+    }));
+    const subnets = subnetRes.Subnets?.map(s => s.SubnetId) || [];
+    if (subnets.length === 0)
+        throw new Error("No subnets found in default VPC");
+    // 3. Create or get Security Group
+    const sgName = `bravocloud-ecs-sg-${port}`;
+    let sgId = "";
+    try {
+        const createSgRes = await ec2Client.send(new client_ec2_1.CreateSecurityGroupCommand({
+            GroupName: sgName,
+            Description: `Allow inbound traffic on port ${port} for BravoCloud ECS`,
+            VpcId: vpcId
+        }));
+        sgId = createSgRes.GroupId;
+        // Add Ingress rule
+        await ec2Client.send(new client_ec2_1.AuthorizeSecurityGroupIngressCommand({
+            GroupId: sgId,
+            IpPermissions: [{
+                    IpProtocol: "tcp",
+                    FromPort: parseInt(port),
+                    ToPort: parseInt(port),
+                    IpRanges: [{ CidrIp: "0.0.0.0/0" }]
+                }]
+        }));
     }
-    const roleArn = await getOrCreateAppRunnerRole();
-    const createServiceCmd = new client_apprunner_1.CreateServiceCommand({
-        ServiceName: serviceName,
-        SourceConfiguration: {
-            AuthenticationConfiguration: {
-                AccessRoleArn: roleArn
-            },
-            ImageRepository: {
-                ImageIdentifier: imageUri,
-                ImageRepositoryType: "ECR",
-                ImageConfiguration: imageConfig
-            },
-            AutoDeploymentsEnabled: true
-        },
-        InstanceConfiguration: {
-            Cpu: "1 vCPU",
-            Memory: "2 GB"
+    catch (error) {
+        if (error.name === "InvalidGroup.Duplicate") {
+            const descSgRes = await ec2Client.send(new client_ec2_1.DescribeSecurityGroupsCommand({
+                GroupNames: [sgName]
+            }));
+            sgId = descSgRes.SecurityGroups?.[0]?.GroupId;
         }
-    });
-    const response = await appRunnerClient.send(createServiceCmd);
-    if (!response.Service?.ServiceUrl) {
-        throw new Error("Failed to deploy to App Runner");
+        else {
+            throw error;
+        }
     }
-    return `https://${response.Service.ServiceUrl}`;
+    return { subnets, sgId };
+}
+async function deployToECS(projectName, imageUri, envVars, port = "3000") {
+    const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const clusterName = `bravocloud-cluster`;
+    const familyName = `bravocloud-task-${sanitizedName}`;
+    // 1. Create/Ensure Cluster
+    await ecsClient.send(new client_ecs_1.CreateClusterCommand({ clusterName }));
+    // 2. Get Execution Role
+    const executionRoleArn = await getOrCreateEcsExecutionRole();
+    // 3. Register Task Definition
+    const environment = envVars ? Object.entries(envVars).map(([name, value]) => ({ name, value })) : [];
+    const taskDefRes = await ecsClient.send(new client_ecs_1.RegisterTaskDefinitionCommand({
+        family: familyName,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "256",
+        memory: "512",
+        executionRoleArn: executionRoleArn,
+        containerDefinitions: [{
+                name: "app",
+                image: imageUri,
+                portMappings: [{ containerPort: parseInt(port), hostPort: parseInt(port) }],
+                environment: environment,
+                essential: true
+            }]
+    }));
+    const taskDefArn = taskDefRes.taskDefinition?.taskDefinitionArn;
+    if (!taskDefArn)
+        throw new Error("Failed to register task definition");
+    // 4. Get Network Config
+    const { subnets, sgId } = await getNetworkConfiguration(port);
+    // 5. Run Task
+    const runTaskRes = await ecsClient.send(new client_ecs_1.RunTaskCommand({
+        cluster: clusterName,
+        taskDefinition: taskDefArn,
+        launchType: "FARGATE",
+        networkConfiguration: {
+            awsvpcConfiguration: {
+                subnets: subnets,
+                securityGroups: [sgId],
+                assignPublicIp: "ENABLED"
+            }
+        }
+    }));
+    const taskArn = runTaskRes.tasks?.[0]?.taskArn;
+    if (!taskArn)
+        throw new Error("Failed to run ECS task");
+    // 6. Wait for Task ENI attachment
+    let eniId = "";
+    for (let i = 0; i < 15; i++) {
+        await new Promise(res => setTimeout(res, 3000));
+        const descTask = await ecsClient.send(new client_ecs_1.DescribeTasksCommand({
+            cluster: clusterName,
+            tasks: [taskArn]
+        }));
+        const task = descTask.tasks?.[0];
+        const eniDetail = task?.attachments?.[0]?.details?.find(d => d.name === "networkInterfaceId");
+        if (eniDetail?.value) {
+            eniId = eniDetail.value;
+            break;
+        }
+    }
+    if (!eniId) {
+        console.log("Could not find ENI for task in time.");
+        return `http://pending-ecs-provisioning`;
+    }
+    // 7. Get Public IP from ENI
+    const eniRes = await ec2Client.send(new client_ec2_1.DescribeNetworkInterfacesCommand({
+        NetworkInterfaceIds: [eniId]
+    }));
+    const publicIp = eniRes.NetworkInterfaces?.[0]?.Association?.PublicIp;
+    if (!publicIp)
+        throw new Error("Task ENI has no public IP assigned");
+    return `http://${publicIp}:${port}`;
 }

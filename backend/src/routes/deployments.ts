@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/firebase';
-import { deployToAppRunner, getAwsAccountId } from '../lib/aws';
+import { deployToECS, getAwsAccountId } from '../lib/aws';
 
 const router = Router();
 
@@ -37,18 +37,18 @@ router.post('/webhook', async (req: any, res: any) => {
           const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
 
           const envs = project.envVars ? (project.envVars as Record<string, string>) : undefined;
-          const appRunnerUrl = await deployToAppRunner(project.name, imageUri, envs);
+          const ecsUrl = await deployToECS(project.name, imageUri, envs);
           
-          console.log(`[Webhook] App Runner Deployed! Live URL: ${appRunnerUrl}`);
+          console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
           
           // Store the live URL on the project document
-          if (appRunnerUrl) {
+          if (ecsUrl) {
             await projectRef.update({
-              subdomain: appRunnerUrl.replace('https://', '').split('/')[0]
+              subdomain: ecsUrl.replace('http://', '').replace('https://', '').split('/')[0]
             });
           }
-        } catch (appRunnerErr) {
-          console.error('[Webhook] Failed to deploy to App Runner:', appRunnerErr);
+        } catch (ecsErr) {
+          console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
         }
       }
     }
