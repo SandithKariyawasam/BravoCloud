@@ -9,6 +9,7 @@ const templates_1 = require("../lib/templates");
 const github_1 = require("../lib/github");
 const aws_1 = require("../lib/aws");
 const middleware_1 = require("../lib/middleware");
+// @ts-ignore
 const node_fetch_1 = __importDefault(require("node-fetch"));
 const router = (0, express_1.Router)();
 const fetchApi = typeof node_fetch_1.default !== 'undefined' ? node_fetch_1.default : require('node-fetch');
