@@ -199,8 +199,21 @@ export default function Dashboard() {
                         <div key={project.id} className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0">
-                                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0 overflow-hidden relative">
+                                {project.subdomain && (
+                                  <img 
+                                    src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`)}`}
+                                    className="w-full h-full object-cover z-10"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                    onLoad={(e) => {
+                                      const svg = e.currentTarget.parentElement?.querySelector('svg');
+                                      if (svg) svg.style.display = 'none';
+                                    }}
+                                  />
+                                )}
+                                <svg className="w-5 h-5 text-white absolute z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
                               </div>
                               <h3 className="font-semibold text-lg truncate text-white">{project.name}</h3>
                             </div>
@@ -249,7 +262,7 @@ export default function Dashboard() {
                                   </>
                                 )}
                               </button>
-                              <a href={project.subdomain ? `https://${project.subdomain}` : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
+                              <a href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
                                 Visit Site
                               </a>
                             </div>

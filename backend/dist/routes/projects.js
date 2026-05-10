@@ -1,12 +1,17 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const firebase_1 = require("../lib/firebase");
 const templates_1 = require("../lib/templates");
 const github_1 = require("../lib/github");
 const aws_1 = require("../lib/aws");
-const router = (0, express_1.Router)();
 const middleware_1 = require("../lib/middleware");
+const node_fetch_1 = __importDefault(require("node-fetch"));
+const router = (0, express_1.Router)();
+const fetchApi = typeof node_fetch_1.default !== 'undefined' ? node_fetch_1.default : require('node-fetch');
 // Create a new project
 router.post('/', middleware_1.verifyToken, async (req, res) => {
     try {
@@ -252,6 +257,56 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
     catch (error) {
         console.error('Error redeploying project:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Proxy Favicon for dashboard cards (bypasses Mixed Content and parses HTML for correct icon)
+router.get('/proxy-favicon', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl)
+        return res.status(400).send('Missing url');
+    try {
+        const htmlRes = await fetchApi(targetUrl);
+        if (!htmlRes.ok)
+            return res.status(404).send('Site not responding');
+        const html = await htmlRes.text();
+        let faviconUrl = '';
+        // Find <link rel="icon" ...> or <link rel="shortcut icon" ...>
+        const linkRegex = /<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["'][^>]*>/i;
+        const linkRegex2 = /<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/i;
+        let match = html.match(linkRegex);
+        if (match) {
+            faviconUrl = match[1];
+        }
+        else {
+            match = html.match(linkRegex2);
+            if (match) {
+                faviconUrl = match[1];
+            }
+        }
+        if (!faviconUrl) {
+            faviconUrl = '/favicon.ico';
+        }
+        // Resolve relative URLs
+        let finalFaviconUrl = faviconUrl;
+        if (faviconUrl.startsWith('/')) {
+            const baseUrl = new URL(targetUrl);
+            finalFaviconUrl = `${baseUrl.origin}${faviconUrl}`;
+        }
+        else if (!faviconUrl.startsWith('http')) {
+            finalFaviconUrl = `${targetUrl.replace(/\/$/, '')}/${faviconUrl}`;
+        }
+        const imageRes = await fetchApi(finalFaviconUrl);
+        if (!imageRes.ok)
+            return res.status(404).send('Favicon not found');
+        const contentType = imageRes.headers.get('content-type') || 'image/x-icon';
+        res.setHeader('Content-Type', contentType);
+        const arrayBuffer = await imageRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        res.send(buffer);
+    }
+    catch (error) {
+        console.error('Failed to proxy favicon:', error);
+        res.status(500).send('Failed to fetch favicon');
     }
 });
 exports.default = router;
