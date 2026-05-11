@@ -214,44 +214,40 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
         // If priority is taken or rule exists, ignore for now as it routes to the correct TG
         console.log("Rule might already exist, proceeding...");
     }
-    // 6. Create or Update Service
+    // 6. Create or Recreate Service
+    const createServiceInput = {
+        cluster: clusterName,
+        serviceName: serviceName,
+        taskDefinition: taskDefArn,
+        launchType: "FARGATE",
+        desiredCount: 1,
+        networkConfiguration: {
+            awsvpcConfiguration: {
+                subnets: subnets,
+                securityGroups: [sgId],
+                assignPublicIp: "ENABLED"
+            }
+        },
+        loadBalancers: [{
+                targetGroupArn: tgArn,
+                containerName: "app",
+                containerPort: parseInt(port)
+            }]
+    };
     try {
-        await ecsClient.send(new client_ecs_1.CreateServiceCommand({
-            cluster: clusterName,
-            serviceName: serviceName,
-            taskDefinition: taskDefArn,
-            launchType: "FARGATE",
-            desiredCount: 1,
-            networkConfiguration: {
-                awsvpcConfiguration: {
-                    subnets: subnets,
-                    securityGroups: [sgId],
-                    assignPublicIp: "ENABLED"
-                }
-            },
-            loadBalancers: [{
-                    targetGroupArn: tgArn,
-                    containerName: "app",
-                    containerPort: parseInt(port)
-                }]
-        }));
+        await ecsClient.send(new client_ecs_1.CreateServiceCommand(createServiceInput));
     }
     catch (err) {
         if (err.name === "InvalidParameterException" && err.message.includes("Creation of service was not idempotent")) {
-            // Service exists, update it!
-            await ecsClient.send(new client_ecs_1.UpdateServiceCommand({
-                cluster: clusterName,
-                service: serviceName,
-                taskDefinition: taskDefArn,
-                desiredCount: 1,
-                networkConfiguration: {
-                    awsvpcConfiguration: {
-                        subnets: subnets,
-                        securityGroups: [sgId],
-                        assignPublicIp: "ENABLED"
-                    }
-                }
-            }));
+            // AWS ECS does NOT allow adding a Load Balancer to an existing service that didn't have one!
+            // We must delete the old service and recreate it.
+            const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
+            console.log("Service exists but needs Load Balancer attachment. Recreating service...");
+            await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
+            // Wait a moment for deletion to propagate
+            await new Promise(r => setTimeout(r, 5000));
+            // Create it again with the Load Balancer!
+            await ecsClient.send(new client_ecs_1.CreateServiceCommand(createServiceInput));
         }
         else {
             throw err;
