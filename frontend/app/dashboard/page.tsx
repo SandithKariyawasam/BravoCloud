@@ -205,7 +205,7 @@ export default function Dashboard() {
                         >
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0 overflow-hidden relative">
+                              <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative">
                                 {project.subdomain && (
                                   <img 
                                     src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`)}`}
