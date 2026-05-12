@@ -238,7 +238,30 @@ router.get('/:id', middleware_1.verifyToken, async (req, res) => {
         if (project.userId !== userId) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
-        res.json({ project });
+        const { getEcsTaskPublicIp } = require('../lib/aws');
+        const taskIp = await getEcsTaskPublicIp(project.name);
+        let latestCommitMessage = 'Deployed via BravoCloud';
+        try {
+            if (project.repoUrl && req.user.githubToken) {
+                const urlParts = project.repoUrl.replace('https://github.com/', '').split('/');
+                const owner = urlParts[0];
+                const repo = urlParts[1];
+                const { Octokit } = require('@octokit/rest');
+                const octokit = new Octokit({ auth: req.user.githubToken });
+                const { data: branchData } = await octokit.rest.repos.getBranch({
+                    owner,
+                    repo,
+                    branch: project.branch || 'main'
+                });
+                if (branchData && branchData.commit && branchData.commit.commit) {
+                    latestCommitMessage = branchData.commit.commit.message.split('\n')[0];
+                }
+            }
+        }
+        catch (e) {
+            console.error('Failed to get latest commit message:', e);
+        }
+        res.json({ project: { id: projectDoc.id, ...project, taskIp, latestCommitMessage } });
     }
     catch (error) {
         console.error('Error fetching project:', error);

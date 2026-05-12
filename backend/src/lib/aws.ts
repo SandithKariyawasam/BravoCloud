@@ -278,3 +278,55 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
 
   return `https://${sanitizedName}.bravocloud.tech`;
 }
+
+export async function getEcsTaskPublicIp(projectName: string): Promise<string | null> {
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const clusterName = `bravocloud-cluster`;
+  const serviceName = `bravocloud-service-${sanitizedName}`;
+
+  try {
+    const { ECSClient, ListTasksCommand, DescribeTasksCommand } = require("@aws-sdk/client-ecs");
+    const { EC2Client, DescribeNetworkInterfacesCommand } = require("@aws-sdk/client-ec2");
+
+    const region = process.env.AWS_REGION || "us-east-1";
+    const ecs = new ECSClient({ region });
+    const ec2 = new EC2Client({ region });
+
+    // 1. Get Task ARN
+    const listRes = await ecs.send(new ListTasksCommand({
+      cluster: clusterName,
+      serviceName: serviceName,
+      desiredStatus: "RUNNING"
+    }));
+
+    if (!listRes.taskArns || listRes.taskArns.length === 0) return null;
+
+    // 2. Get Task Details to find ENI
+    const descRes = await ecs.send(new DescribeTasksCommand({
+      cluster: clusterName,
+      tasks: [listRes.taskArns[0]]
+    }));
+
+    const task = descRes.tasks?.[0];
+    if (!task) return null;
+
+    const eniAttachment = task.attachments?.find((a: any) => a.type === "ElasticNetworkInterface");
+    if (!eniAttachment) return null;
+
+    const eniIdDetail = eniAttachment.details?.find((d: any) => d.name === "networkInterfaceId");
+    if (!eniIdDetail || !eniIdDetail.value) return null;
+
+    // 3. Get Public IP from ENI
+    const ec2Res = await ec2.send(new DescribeNetworkInterfacesCommand({
+      NetworkInterfaceIds: [eniIdDetail.value]
+    }));
+
+    const eni = ec2Res.NetworkInterfaces?.[0];
+    if (!eni || !eni.Association || !eni.Association.PublicIp) return null;
+
+    return eni.Association.PublicIp;
+  } catch (e) {
+    console.error("Failed to get ECS task IP:", e);
+    return null;
+  }
+}

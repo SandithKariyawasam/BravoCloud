@@ -104,6 +104,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
   const isBuilding = currentStatus === 'QUEUED' || currentStatus === 'BUILDING';
   const isSuccess = currentStatus === 'SUCCESS' || currentStatus === 'DEPLOYED';
   const isFailed = currentStatus === 'FAILED';
+  const latestDeployment = deployments.length > 0 ? deployments[0] : null;
   const publicUrl = project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null;
 
   return (
@@ -126,7 +127,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
           {/* Header Section */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-[#27272a]">
             <div className="flex items-start gap-5">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-lg">
+              <div className="w-16 h-16 rounded-2xl bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-lg">
                 {publicUrl && (
                   <img 
                     src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(publicUrl)}`}
@@ -195,55 +196,97 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            {/* Main Column - Deployments */}
+            {/* Main Column - Live Preview */}
             <div className="lg:col-span-2 flex flex-col gap-6">
-              <h3 className="text-xl font-bold tracking-tight">Deployments</h3>
+              <h3 className="text-xl font-bold tracking-tight">Production Deployment</h3>
               
-              <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl overflow-hidden shadow-2xl">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-[#27272a] bg-[#27272a]/30">
-                      <th className="px-6 py-4 text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider">Commit</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-[#a1a1aa] uppercase tracking-wider">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#27272a]">
-                    {deployments.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-8 text-center text-[#71717a] text-sm">No deployments found.</td>
-                      </tr>
-                    ) : (
-                      deployments.map((dep, idx) => (
-                        <tr key={dep.id} className="hover:bg-[#27272a]/30 transition-colors group">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase flex items-center gap-1.5 w-fit
-                              ${(dep.status === 'SUCCESS' || dep.status === 'DEPLOYED') ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                                dep.status === 'FAILED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                                'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
-                              {(dep.status === 'QUEUED' || dep.status === 'BUILDING') && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
-                              {dep.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm font-mono text-[#e4e4e7]">
-                            <div className="flex items-center gap-2">
-                              <svg className="w-4 h-4 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                              {dep.commitHash ? dep.commitHash.substring(0, 7) : 'trigger'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-[#a1a1aa] whitespace-nowrap">
-                            {new Date(dep.createdAt).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div className="bg-[#18181b] border border-[#27272a] rounded-2xl overflow-hidden shadow-2xl relative aspect-video flex flex-col">
+                {/* Iframe content */}
+                <div className="flex-1 bg-black relative overflow-hidden pointer-events-none">
+                  {publicUrl ? (
+                    <iframe 
+                      src={publicUrl}
+                      className="w-[100%] h-[100%] border-0 bg-black"
+                      title="Live Preview"
+                      sandbox="allow-scripts allow-same-origin"
+                      scrolling="no"
+                      tabIndex={-1}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-black flex flex-col items-center justify-center text-[#71717a] font-mono text-sm">
+                      <svg className="animate-spin h-8 w-8 text-[#71717a] mb-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Waiting for first deployment to complete...
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Sidebar Column - Settings */}
-            <div className="flex flex-col gap-6">
+            {/* Sidebar Column - Meta */}
+            <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-6 shadow-2xl flex flex-col gap-7 text-[#e4e4e7]">
+              
+              {/* Deployment */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-[14px] text-[#a1a1aa]">Deployment</h4>
+                <a href={project.taskIp ? `http://${project.taskIp}:3000` : (publicUrl || '#')} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
+                  {project.taskIp ? `http://${project.taskIp}:3000` : 'Deploying...'}
+                </a>
+              </div>
+
+              {/* Domains */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-[14px] text-[#a1a1aa]">Domains</h4>
+                  <button className="w-4 h-4 rounded-full border border-[#3f3f46] flex items-center justify-center text-[#a1a1aa] hover:text-white hover:border-white transition-colors">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <a href={publicUrl || '#'} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate">
+                    {publicUrl ? publicUrl.replace('https://', '').replace('http://', '') : 'Pending...'}
+                  </a>
+                  <svg className="w-3.5 h-3.5 text-[#a1a1aa] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                </div>
+              </div>
+
+              {/* Status & Created */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <h4 className="text-[14px] text-[#a1a1aa]">Status</h4>
+                  <div className="flex items-center gap-2 text-[14px] font-semibold">
+                    <div className={`w-2 h-2 rounded-full ${(latestDeployment?.status === 'SUCCESS' || latestDeployment?.status === 'DEPLOYED') ? 'bg-[#22c55e]' : latestDeployment?.status === 'FAILED' ? 'bg-[#ef4444]' : 'bg-[#eab308]'}`}></div>
+                    {(latestDeployment?.status === 'SUCCESS' || latestDeployment?.status === 'DEPLOYED') ? 'Ready' : latestDeployment?.status || 'Unknown'}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <h4 className="text-[14px] text-[#a1a1aa]">Created</h4>
+                  <div className="text-[14px] font-semibold truncate flex items-center gap-2">
+                    {latestDeployment ? new Date(latestDeployment.createdAt).toLocaleDateString() : 'Just now'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Source */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-[14px] text-[#a1a1aa]">Source</h4>
+                <div className="flex items-center gap-2 text-[14px]">
+                  <svg className="w-4 h-4 text-[#a1a1aa]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                  <span className="font-mono font-semibold">{project.branch}</span>
+                </div>
+                <div className="flex items-center gap-2 text-[13px] text-[#a1a1aa]">
+                  <span className="font-mono opacity-60">-o-</span>
+                  <span className="font-mono text-white">{latestDeployment?.commitHash ? latestDeployment.commitHash.substring(0,7) : 'trigger'}</span>
+                  <span className="truncate ml-1">{project.latestCommitMessage || 'Deployed via BravoCloud'}</span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Sidebar Column - Configuration */}
+            <div className="flex flex-col gap-6 mt-8">
               <h3 className="text-xl font-bold tracking-tight">Configuration</h3>
               
               <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-6 shadow-2xl flex flex-col gap-5">
@@ -265,14 +308,6 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
                   </div>
                 </div>
 
-                <div>
-                  <h4 className="text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-2">Branch</h4>
-                  <div className="flex items-center gap-2 text-sm text-[#e4e4e7] bg-[#27272a]/30 p-3 rounded-lg border border-[#3f3f46]/50">
-                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                    <span>{project.branch}</span>
-                  </div>
-                </div>
-
                 {project.envVars && Object.keys(project.envVars).length > 0 && (
                   <div>
                     <h4 className="text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-2">Environment Variables</h4>
@@ -289,7 +324,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
                 
               </div>
             </div>
-
+            
           </div>
         </div>
       </div>
