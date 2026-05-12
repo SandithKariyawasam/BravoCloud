@@ -175,6 +175,52 @@ router.get('/', middleware_1.verifyToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch projects' });
     }
 });
+// Get a single project
+router.get('/:id', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const projectDoc = await firebase_1.db.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        const project = projectDoc.data();
+        if (project.userId !== userId) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        res.json({ project });
+    }
+    catch (error) {
+        console.error('Error fetching project:', error);
+        res.status(500).json({ error: 'Failed to fetch project' });
+    }
+});
+// Get a project's deployments
+router.get('/:id/deployments', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        // Verify ownership
+        const projectDoc = await firebase_1.db.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        const project = projectDoc.data();
+        if (project.userId !== userId) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        const depsSnapshot = await firebase_1.db.collection('deployments')
+            .where('projectId', '==', projectId)
+            .get();
+        let deployments = depsSnapshot.docs.map(d => d.data());
+        deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        res.json({ deployments });
+    }
+    catch (error) {
+        console.error('Error fetching deployments:', error);
+        res.status(500).json({ error: 'Failed to fetch deployments' });
+    }
+});
 // Redeploy an existing project
 router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
     try {

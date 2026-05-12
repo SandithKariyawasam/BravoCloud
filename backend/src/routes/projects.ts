@@ -215,6 +215,60 @@ router.get('/', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// Get a single project
+router.get('/:id', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const project = projectDoc.data() as any;
+    if (project.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    res.json({ project });
+  } catch (error) {
+    console.error('Error fetching project:', error);
+    res.status(500).json({ error: 'Failed to fetch project' });
+  }
+});
+
+// Get a project's deployments
+router.get('/:id/deployments', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    // Verify ownership
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const project = projectDoc.data() as any;
+    if (project.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const depsSnapshot = await db.collection('deployments')
+      .where('projectId', '==', projectId)
+      .get();
+      
+    let deployments = depsSnapshot.docs.map(d => d.data());
+    deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    res.json({ deployments });
+  } catch (error) {
+    console.error('Error fetching deployments:', error);
+    res.status(500).json({ error: 'Failed to fetch deployments' });
+  }
+});
+
 // Redeploy an existing project
 router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
   try {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import BackgroundAnimation from "../components/BackgroundAnimation";
 
@@ -26,6 +27,7 @@ interface UserProfile {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -196,7 +198,11 @@ export default function Dashboard() {
                       const isFailed = status === 'FAILED';
                       
                       return (
-                        <div key={project.id} className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col">
+                        <div 
+                          key={project.id} 
+                          onClick={() => router.push(`/dashboard/project/${project.id}`)}
+                          className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col cursor-pointer"
+                        >
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
                               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0 overflow-hidden relative">
@@ -243,7 +249,10 @@ export default function Dashboard() {
                             </span>
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleRedeploy(project.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRedeploy(project.id);
+                                }}
                                 disabled={redeployingProjectId === project.id}
                                 className="text-xs font-semibold px-3 py-1.5 bg-[#27272a] text-white rounded-lg hover:bg-[#3f3f46] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
                               >
@@ -262,7 +271,13 @@ export default function Dashboard() {
                                   </>
                                 )}
                               </button>
-                              <a href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
+                              <a 
+                                href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
+                              >
                                 Visit Site
                               </a>
                             </div>
