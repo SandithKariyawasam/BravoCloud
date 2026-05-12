@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
 import DeploymentsList from "../../../../components/DeploymentsList";
 
-export default function ProjectDeploymentsPage({ params }: { params: { id: string } }) {
+export default function ProjectDeploymentsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const projectId = resolvedParams.id;
   const router = useRouter();
   const [project, setProject] = useState<any>(null);
   const [deployments, setDeployments] = useState([]);
@@ -24,8 +26,8 @@ export default function ProjectDeploymentsPage({ params }: { params: { id: strin
     
     Promise.all([
       fetch(`${apiUrl}/auth/me`, { headers: { "Authorization": `Bearer ${token}` } }),
-      fetch(`${apiUrl}/api/projects/${params.id}`, { headers: { "Authorization": `Bearer ${token}` } }),
-      fetch(`${apiUrl}/api/projects/${params.id}/deployments`, { headers: { "Authorization": `Bearer ${token}` } })
+      fetch(`${apiUrl}/api/projects/${projectId}`, { headers: { "Authorization": `Bearer ${token}` } }),
+      fetch(`${apiUrl}/api/projects/${projectId}/deployments`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
     .then(async ([userRes, projRes, depsRes]) => {
       if (userRes.ok) setUser((await userRes.json()).user);
@@ -37,7 +39,7 @@ export default function ProjectDeploymentsPage({ params }: { params: { id: strin
       console.error(err);
       setLoading(false);
     });
-  }, [params.id]);
+  }, [projectId]);
 
   if (loading) {
     return (

@@ -35,8 +35,6 @@ router.get('/', verifyToken, async (req: any, res: any) => {
     const fetchPromises = projectIds.map(async (projectId) => {
       const depsSnap = await db.collection('deployments')
         .where('projectId', '==', projectId)
-        .orderBy('createdAt', 'desc')
-        .limit(20) // Limit per project to avoid huge payloads
         .get();
         
       depsSnap.forEach(doc => {
