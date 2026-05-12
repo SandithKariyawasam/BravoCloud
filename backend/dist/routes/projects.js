@@ -175,6 +175,56 @@ router.get('/', middleware_1.verifyToken, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch projects' });
     }
 });
+// Proxy Favicon for dashboard cards (bypasses Mixed Content and parses HTML for correct icon)
+router.get('/proxy-favicon', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl)
+        return res.status(400).send('Missing url');
+    try {
+        const htmlRes = await fetchApi(targetUrl);
+        if (!htmlRes.ok)
+            return res.status(404).send('Site not responding');
+        const html = await htmlRes.text();
+        let faviconUrl = '';
+        // Find <link rel="icon" ...> or <link rel="shortcut icon" ...>
+        const linkRegex = /<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["'][^>]*>/i;
+        const linkRegex2 = /<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/i;
+        let match = html.match(linkRegex);
+        if (match) {
+            faviconUrl = match[1];
+        }
+        else {
+            match = html.match(linkRegex2);
+            if (match) {
+                faviconUrl = match[1];
+            }
+        }
+        if (!faviconUrl) {
+            faviconUrl = '/favicon.ico';
+        }
+        // Resolve relative URLs
+        let finalFaviconUrl = faviconUrl;
+        if (faviconUrl.startsWith('/')) {
+            const baseUrl = new URL(targetUrl);
+            finalFaviconUrl = `${baseUrl.origin}${faviconUrl}`;
+        }
+        else if (!faviconUrl.startsWith('http')) {
+            finalFaviconUrl = `${targetUrl.replace(/\/$/, '')}/${faviconUrl}`;
+        }
+        const imageRes = await fetchApi(finalFaviconUrl);
+        if (!imageRes.ok)
+            return res.status(404).send('Favicon not found');
+        const contentType = imageRes.headers.get('content-type') || 'image/x-icon';
+        res.setHeader('Content-Type', contentType);
+        const arrayBuffer = await imageRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        res.send(buffer);
+    }
+    catch (error) {
+        console.error('Failed to proxy favicon:', error);
+        res.status(500).send('Failed to fetch favicon');
+    }
+});
 // Get a single project
 router.get('/:id', middleware_1.verifyToken, async (req, res) => {
     try {
@@ -304,56 +354,6 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
     catch (error) {
         console.error('Error redeploying project:', error);
         res.status(500).json({ error: 'Internal server error' });
-    }
-});
-// Proxy Favicon for dashboard cards (bypasses Mixed Content and parses HTML for correct icon)
-router.get('/proxy-favicon', async (req, res) => {
-    const targetUrl = req.query.url;
-    if (!targetUrl)
-        return res.status(400).send('Missing url');
-    try {
-        const htmlRes = await fetchApi(targetUrl);
-        if (!htmlRes.ok)
-            return res.status(404).send('Site not responding');
-        const html = await htmlRes.text();
-        let faviconUrl = '';
-        // Find <link rel="icon" ...> or <link rel="shortcut icon" ...>
-        const linkRegex = /<link[^>]*rel=["'](?:shortcut )?icon["'][^>]*href=["']([^"']+)["'][^>]*>/i;
-        const linkRegex2 = /<link[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut )?icon["'][^>]*>/i;
-        let match = html.match(linkRegex);
-        if (match) {
-            faviconUrl = match[1];
-        }
-        else {
-            match = html.match(linkRegex2);
-            if (match) {
-                faviconUrl = match[1];
-            }
-        }
-        if (!faviconUrl) {
-            faviconUrl = '/favicon.ico';
-        }
-        // Resolve relative URLs
-        let finalFaviconUrl = faviconUrl;
-        if (faviconUrl.startsWith('/')) {
-            const baseUrl = new URL(targetUrl);
-            finalFaviconUrl = `${baseUrl.origin}${faviconUrl}`;
-        }
-        else if (!faviconUrl.startsWith('http')) {
-            finalFaviconUrl = `${targetUrl.replace(/\/$/, '')}/${faviconUrl}`;
-        }
-        const imageRes = await fetchApi(finalFaviconUrl);
-        if (!imageRes.ok)
-            return res.status(404).send('Favicon not found');
-        const contentType = imageRes.headers.get('content-type') || 'image/x-icon';
-        res.setHeader('Content-Type', contentType);
-        const arrayBuffer = await imageRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        res.send(buffer);
-    }
-    catch (error) {
-        console.error('Failed to proxy favicon:', error);
-        res.status(500).send('Failed to fetch favicon');
     }
 });
 exports.default = router;
