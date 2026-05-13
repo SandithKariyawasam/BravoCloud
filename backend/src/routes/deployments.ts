@@ -86,8 +86,6 @@ router.post('/webhook', async (req: any, res: any) => {
         const project = projectDoc.data() as any;
         try {
           const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
-          // Generate the expected ECR URI format to pass to App Runner
-          // In production, you would fetch this using DescribeRepositories or pass it in the webhook
           const region = process.env.AWS_REGION || "us-east-1";
           const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
           const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
@@ -97,11 +95,22 @@ router.post('/webhook', async (req: any, res: any) => {
           
           console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
           
-          // Store the live URL on the project document
+          // Wait briefly for the new task to stabilize, then get its IP
+          await new Promise(r => setTimeout(r, 10000));
+          const { getEcsTaskPublicIp } = require('../lib/aws');
+          const taskIp = await getEcsTaskPublicIp(project.name);
+          
+          // Store the live URL and new IP on the project document
+          const updatePayload: any = {};
           if (ecsUrl) {
-            await projectRef.update({
-              subdomain: ecsUrl.replace('http://', '').replace('https://', '').split('/')[0]
-            });
+            updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
+          }
+          if (taskIp) {
+             updatePayload.taskIp = taskIp;
+          }
+          
+          if (Object.keys(updatePayload).length > 0) {
+             await projectRef.update(updatePayload);
           }
         } catch (ecsErr) {
           console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
