@@ -259,20 +259,29 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   try {
     await ecsClient.send(new CreateServiceCommand(createServiceInput as any));
   } catch (err: any) {
-    if (err.name === "InvalidParameterException" && err.message.includes("Creation of service was not idempotent")) {
-        // AWS ECS does NOT allow adding a Load Balancer to an existing service that didn't have one!
-        // We must delete the old service and recreate it.
+    console.log(`CreateService failed (${err.name}), attempting UpdateService...`);
+    const { UpdateServiceCommand } = require("@aws-sdk/client-ecs");
+    try {
+      await ecsClient.send(new UpdateServiceCommand({
+        cluster: clusterName,
+        service: serviceName,
+        taskDefinition: taskDefArn,
+        desiredCount: 1,
+        forceNewDeployment: true // This forces a rolling update!
+      }));
+      console.log("Service updated successfully with new deployment!");
+    } catch (updateErr: any) {
+      if (updateErr.name === "InvalidParameterException" || err.message.includes("idempotent")) {
+        // Fallback for massive structural changes (like adding LB)
         const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
-        console.log("Service exists but needs Load Balancer attachment. Recreating service...");
+        console.log("Service update failed, recreating service...");
         await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
         
-        // Wait a moment for deletion to propagate
         await new Promise(r => setTimeout(r, 5000));
-
-        // Create it again with the Load Balancer!
         await ecsClient.send(new CreateServiceCommand(createServiceInput as any));
-    } else {
-        throw err;
+      } else {
+        throw updateErr;
+      }
     }
   }
 
