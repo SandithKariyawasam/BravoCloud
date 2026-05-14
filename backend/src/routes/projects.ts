@@ -544,4 +544,125 @@ router.post('/:id/deployments/:deploymentId/rollback', verifyToken, async (req: 
   }
 });
 
+// Fetch GitHub Build Logs
+router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId } = req.params;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    const user = userDoc.data() as any;
+    if (!user?.githubToken) return res.status(400).json({ error: 'GitHub token not found' });
+
+    const [repoOwner, repoName] = projectData.githubRepo.split('/');
+    
+    // Get latest deployments
+    const deploymentsSnapshot = await db.collection('deployments')
+      .where('projectId', '==', projectId)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+      
+    if (deploymentsSnapshot.empty) return res.json({ jobs: [] });
+    
+    const latestDep = deploymentsSnapshot.docs[0].data();
+    
+    // We fetch all workflow runs for the repo
+    const runsRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
+      headers: {
+        'Authorization': `token ${user.githubToken}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+    
+    if (!runsRes.ok) return res.status(runsRes.status).json({ error: 'Failed to fetch runs' });
+    
+    const runsData = await runsRes.json();
+    let targetRun = runsData.workflow_runs?.[0];
+    
+    // Try to find run by commit hash
+    if (latestDep.commitHash && latestDep.commitHash !== 'redeploy-trigger' && latestDep.commitHash !== 'manual') {
+      const match = runsData.workflow_runs?.find((r: any) => r.head_sha === latestDep.commitHash);
+      if (match) targetRun = match;
+    }
+    
+    if (!targetRun) return res.json({ jobs: [] });
+
+    // Fetch jobs for that run
+    const jobsRes = await fetch(targetRun.jobs_url, {
+      headers: {
+        'Authorization': `token ${user.githubToken}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+    
+    if (!jobsRes.ok) return res.status(jobsRes.status).json({ error: 'Failed to fetch jobs' });
+    
+    const jobsData = await jobsRes.json();
+    res.json({ jobs: jobsData.jobs || [] });
+
+  } catch (error) {
+    console.error('Error fetching build logs:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Fetch AWS Runtime Logs
+router.get('/:id/logs/runtime', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId } = req.params;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const sanitizedName = projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+    const region = process.env.AWS_REGION || "us-east-1";
+
+    const { CloudWatchLogsClient, FilterLogEventsCommand } = require("@aws-sdk/client-cloudwatch-logs");
+    const cwClient = new CloudWatchLogsClient({ region });
+    
+    // Get logs from last 1 hour
+    const startTime = Date.now() - (60 * 60 * 1000);
+    
+    try {
+      const logRes = await cwClient.send(new FilterLogEventsCommand({
+        logGroupName,
+        startTime,
+        limit: 100
+      }));
+      
+      const events = logRes.events?.map((e: any) => ({
+        timestamp: e.timestamp,
+        message: e.message
+      })) || [];
+      
+      res.json({ logs: events });
+    } catch (cwErr: any) {
+      if (cwErr.name === 'ResourceNotFoundException') {
+        return res.json({ logs: [{ timestamp: Date.now(), message: 'Waiting for container to start and emit logs...' }] });
+      }
+      throw cwErr;
+    }
+
+  } catch (error) {
+    console.error('Error fetching runtime logs:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

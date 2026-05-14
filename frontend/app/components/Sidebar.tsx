@@ -38,6 +38,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isProjectView = pathname?.includes('/dashboard/project/');
   const projectId = isProjectView ? pathname.split('/')[3] : null;
   const isDeploymentsPage = pathname?.endsWith('/deployments');
+  const isLogsPage = pathname?.endsWith('/logs');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [activeItem, setActiveItem] = useState<string>("Projects");
@@ -46,10 +47,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   useEffect(() => {
     if (isDeploymentsPage) {
       setActiveItem("Deployments");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage)) {
+    } else if (isLogsPage) {
+      setActiveItem("Logs");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage)) {
       setActiveItem("Projects");
     }
-  }, [pathname, isDeploymentsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -98,7 +101,14 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 router.push('/dashboard/deployments');
               }
             }} q={q} category="Main" />
-            <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => handleSelect("main", setActiveItem, "Logs")} q={q} category="Main" />
+            {isProjectView && (
+              <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
+                handleSelect("main", setActiveItem, "Logs");
+                if (projectId) {
+                  router.push(`/dashboard/project/${projectId}/logs`);
+                }
+              }} q={q} category="Main" />
+            )}
             <SidebarItem icon={<Activity size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => handleSelect("main", setActiveItem, "Analytics")} q={q} category="Main" />
             <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />

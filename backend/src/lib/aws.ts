@@ -157,7 +157,19 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   // 2. Get Execution Role
   const executionRoleArn = await getOrCreateEcsExecutionRole();
 
-  // 3. Register Task Definition
+  // 3. Ensure CloudWatch Log Group exists
+  const { CloudWatchLogsClient, CreateLogGroupCommand } = require("@aws-sdk/client-cloudwatch-logs");
+  const cwClient = new CloudWatchLogsClient({ region });
+  const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+  try {
+    await cwClient.send(new CreateLogGroupCommand({ logGroupName }));
+  } catch (err: any) {
+    if (err.name !== "ResourceAlreadyExistsException") {
+      console.warn("Log group creation warning:", err.message);
+    }
+  }
+
+  // 4. Register Task Definition
   const environment = envVars ? Object.entries(envVars).map(([name, value]) => ({ name, value })) : [];
   
   const taskDefRes = await ecsClient.send(new RegisterTaskDefinitionCommand({
@@ -172,7 +184,15 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
       image: imageUri,
       portMappings: [{ containerPort: parseInt(port), hostPort: parseInt(port) }],
       environment: environment,
-      essential: true
+      essential: true,
+      logConfiguration: {
+        logDriver: "awslogs",
+        options: {
+          "awslogs-group": logGroupName,
+          "awslogs-region": region,
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
     }]
   }));
 
