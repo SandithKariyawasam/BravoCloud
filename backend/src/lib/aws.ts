@@ -324,28 +324,37 @@ export async function getEcsTaskPublicIp(projectName: string): Promise<string | 
     const ecs = new ECSClient({ region });
     const ec2 = new EC2Client({ region });
 
-    // 1. Get Task ARN
-    const listRes = await ecs.send(new ListTasksCommand({
-      cluster: clusterName,
-      serviceName: serviceName,
-      desiredStatus: "RUNNING"
-    }));
+    let eniIdDetail;
+    
+    // Poll up to 30 times (1 minute) for the task to reach RUNNING state and have an ENI
+    for (let i = 0; i < 30; i++) {
+      const listRes = await ecs.send(new ListTasksCommand({
+        cluster: clusterName,
+        serviceName: serviceName,
+        desiredStatus: "RUNNING"
+      }));
 
-    if (!listRes.taskArns || listRes.taskArns.length === 0) return null;
+      if (listRes.taskArns && listRes.taskArns.length > 0) {
+        const descRes = await ecs.send(new DescribeTasksCommand({
+          cluster: clusterName,
+          tasks: [listRes.taskArns[0]]
+        }));
 
-    // 2. Get Task Details to find ENI
-    const descRes = await ecs.send(new DescribeTasksCommand({
-      cluster: clusterName,
-      tasks: [listRes.taskArns[0]]
-    }));
+        const task = descRes.tasks?.[0];
+        if (task) {
+          const eniAttachment = task.attachments?.find((a: any) => a.type === "ElasticNetworkInterface");
+          if (eniAttachment) {
+            eniIdDetail = eniAttachment.details?.find((d: any) => d.name === "networkInterfaceId");
+            if (eniIdDetail && eniIdDetail.value) {
+              break; // Found it!
+            }
+          }
+        }
+      }
+      // Wait 2 seconds before checking again
+      await new Promise(r => setTimeout(r, 2000));
+    }
 
-    const task = descRes.tasks?.[0];
-    if (!task) return null;
-
-    const eniAttachment = task.attachments?.find((a: any) => a.type === "ElasticNetworkInterface");
-    if (!eniAttachment) return null;
-
-    const eniIdDetail = eniAttachment.details?.find((d: any) => d.name === "networkInterfaceId");
     if (!eniIdDetail || !eniIdDetail.value) return null;
 
     // 3. Get Public IP from ENI
