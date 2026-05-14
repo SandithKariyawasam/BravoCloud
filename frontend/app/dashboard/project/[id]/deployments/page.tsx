@@ -22,6 +22,29 @@ export default function ProjectDeploymentsPage({ params }: { params: Promise<{ i
       return;
     }
 
+    let hasCache = false;
+    const cachedData = localStorage.getItem(`bravocloud_project_cache_${projectId}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.project && parsed.deployments && parsed.deployments.length > 0) {
+          setProject(parsed.project);
+          setDeployments(parsed.deployments);
+          setLoading(false);
+          hasCache = true;
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    fetchData(token, hasCache);
+  }, [projectId]);
+
+  const fetchData = (token: string, hasCache: boolean) => {
+    if (!hasCache) {
+      setLoading(true);
+    }
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     
     Promise.all([
@@ -30,16 +53,29 @@ export default function ProjectDeploymentsPage({ params }: { params: Promise<{ i
       fetch(`${apiUrl}/api/projects/${projectId}/deployments`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
     .then(async ([userRes, projRes, depsRes]) => {
-      if (userRes.ok) setUser((await userRes.json()).user);
-      if (projRes.ok) setProject((await projRes.json()).project);
-      if (depsRes.ok) setDeployments((await depsRes.json()).deployments || []);
+      let userObj = null;
+      let projObj = null;
+      let depsList = [];
+      
+      if (userRes.ok) userObj = (await userRes.json()).user;
+      if (projRes.ok) projObj = (await projRes.json()).project;
+      if (depsRes.ok) depsList = (await depsRes.json()).deployments || [];
+      
+      if (userObj) setUser(userObj);
+      if (projObj) setProject(projObj);
+      setDeployments(depsList as any);
       setLoading(false);
+      
+      localStorage.setItem(`bravocloud_project_cache_${projectId}`, JSON.stringify({
+        project: projObj || project,
+        deployments: depsList
+      }));
     })
     .catch((err) => {
       console.error(err);
       setLoading(false);
     });
-  }, [projectId]);
+  };
 
   if (loading) {
     return (

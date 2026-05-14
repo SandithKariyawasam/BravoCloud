@@ -17,6 +17,29 @@ export default function DeploymentsPage() {
       return;
     }
 
+    let hasCache = false;
+    const cachedData = localStorage.getItem("bravocloud_deployments_cache");
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.deployments || parsed.user) {
+          if (parsed.deployments) setDeployments(parsed.deployments);
+          if (parsed.user) setUser(parsed.user);
+          setLoading(false);
+          hasCache = true;
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    fetchData(token, hasCache);
+  }, []);
+
+  const fetchData = (token: string, hasCache: boolean) => {
+    if (!hasCache) {
+      setLoading(true);
+    }
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     
     Promise.all([
@@ -24,15 +47,26 @@ export default function DeploymentsPage() {
       fetch(`${apiUrl}/api/deployments`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
     .then(async ([userRes, depsRes]) => {
-      if (userRes.ok) setUser((await userRes.json()).user);
-      if (depsRes.ok) setDeployments((await depsRes.json()).deployments || []);
+      let userObj = null;
+      let depsList = [];
+      
+      if (userRes.ok) userObj = (await userRes.json()).user;
+      if (depsRes.ok) depsList = (await depsRes.json()).deployments || [];
+      
+      if (userObj) setUser(userObj);
+      setDeployments(depsList as any);
       setLoading(false);
+      
+      localStorage.setItem("bravocloud_deployments_cache", JSON.stringify({
+        user: userObj,
+        deployments: depsList
+      }));
     })
     .catch((err) => {
       console.error(err);
       setLoading(false);
     });
-  }, []);
+  };
 
   return (
     <div className="flex h-screen bg-black text-white font-sans overflow-hidden">

@@ -15,10 +15,30 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
   const [redeploying, setRedeploying] = useState(false);
 
   useEffect(() => {
-    fetchProjectDetails();
+    let hasCache = false;
+    // Attempt instant load from cache
+    const cachedData = localStorage.getItem(`bravocloud_project_cache_${projectId}`);
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.project && parsed.deployments && parsed.deployments.length > 0) {
+          setProject(parsed.project);
+          setDeployments(parsed.deployments);
+          setLoading(false);
+          hasCache = true;
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    fetchProjectDetails(hasCache);
   }, [projectId]);
 
-  const fetchProjectDetails = async () => {
+  const fetchProjectDetails = async (hasCache: boolean = false) => {
+    if (!hasCache) {
+      setLoading(true);
+    }
     try {
       const token = localStorage.getItem('bravocloud_token');
       if (!token) {
@@ -38,16 +58,22 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
       if (projRes.ok && depRes.ok) {
         const projData = await projRes.json();
         const depData = await depRes.json();
+        
         setProject(projData.project);
         setDeployments(depData.deployments);
+        setLoading(false);
+        
+        // Save to cache for next instant load
+        localStorage.setItem(`bravocloud_project_cache_${projectId}`, JSON.stringify({
+          project: projData.project,
+          deployments: depData.deployments
+        }));
       } else {
         router.push('/dashboard');
       }
     } catch (error) {
       console.error('Error fetching details:', error);
       router.push('/dashboard');
-    } finally {
-      setLoading(false);
     }
   };
 

@@ -62,11 +62,32 @@ export default function Dashboard() {
       return;
     }
 
-    fetchDashboardData(token);
+    let hasCache = false;
+    // Load from cache instantly
+    const cachedData = localStorage.getItem("bravocloud_dashboard_cache");
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.repos || parsed.projects) {
+          if (parsed.repos) setRepos(parsed.repos);
+          if (parsed.user) setUser(parsed.user);
+          if (parsed.projects) setDeployedProjects(parsed.projects);
+          setLoading(false); // Instantly show UI
+          hasCache = true;
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    fetchDashboardData(token, hasCache);
   }, []);
 
-  const fetchDashboardData = (token: string) => {
-    setLoading(true);
+  const fetchDashboardData = (token: string, hasCache: boolean = false) => {
+    // Only set loading to true if we don't have cached data showing already
+    if (!hasCache) {
+      setLoading(true);
+    }
 
     const headers = { "Authorization": `Bearer ${token}` };
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -90,10 +111,21 @@ export default function Dashboard() {
           projectsData = await projectsRes.json();
         }
 
-        setRepos(reposData.repos || []);
-        setUser(userData.user);
-        setDeployedProjects(projectsData.projects || []);
+        const reposList = reposData.repos || [];
+        const userObj = userData.user;
+        const projectsList = projectsData.projects || [];
+
+        setRepos(reposList);
+        setUser(userObj);
+        setDeployedProjects(projectsList);
         setLoading(false);
+        
+        // Save to cache for next instant load
+        localStorage.setItem("bravocloud_dashboard_cache", JSON.stringify({
+          repos: reposList,
+          user: userObj,
+          projects: projectsList
+        }));
       })
       .catch((err) => {
         console.error(err);
