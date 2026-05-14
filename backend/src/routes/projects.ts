@@ -449,4 +449,99 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// Rollback to a specific deployment
+router.post('/:id/deployments/:deploymentId/rollback', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId, deploymentId } = req.params;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+
+    if (!projectDoc.exists) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const targetDeploymentRef = db.collection('deployments').doc(deploymentId);
+    const targetDeploymentDoc = await targetDeploymentRef.get();
+    
+    if (!targetDeploymentDoc.exists) {
+      return res.status(404).json({ error: 'Deployment not found' });
+    }
+    
+    const targetDeploymentData = targetDeploymentDoc.data() as any;
+    if (targetDeploymentData.projectId !== projectId) {
+      return res.status(400).json({ error: 'Deployment does not belong to this project' });
+    }
+    
+    if (!targetDeploymentData.commitHash || targetDeploymentData.commitHash === 'redeploy-trigger' || targetDeploymentData.commitHash === 'manual') {
+      return res.status(400).json({ error: 'This deployment cannot be rolled back because it lacks a specific image hash.' });
+    }
+
+    // Create a new deployment record for the rollback
+    const newDeploymentRef = db.collection('deployments').doc();
+    const newDeploymentData = {
+      id: newDeploymentRef.id,
+      projectId: projectData.id,
+      status: 'QUEUED',
+      commitHash: targetDeploymentData.commitHash, // Reuse the hash
+      commitMessage: `Rollback to ${targetDeploymentData.commitHash.substring(0, 7)}`,
+      createdAt: new Date().toISOString()
+    };
+    await newDeploymentRef.set(newDeploymentData);
+
+    res.json({ message: 'Rollback initiated successfully', deployment: newDeploymentData });
+
+    // Perform rollback asynchronously
+    (async () => {
+      try {
+        await newDeploymentRef.update({ status: 'BUILDING' });
+        
+        const { getAwsAccountId, deployToECS, getEcsTaskPublicIp } = require('../lib/aws');
+        const ecrRepoName = `bravocloud-${projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+        const region = process.env.AWS_REGION || "us-east-1";
+        const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
+        
+        // Pass the exact commitHash instead of 'latest'
+        const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:${targetDeploymentData.commitHash}`;
+        
+        const envs = projectData.envVars ? (projectData.envVars as Record<string, string>) : undefined;
+        const ecsUrl = await deployToECS(projectData.name, imageUri, envs);
+        
+        // Wait briefly for the new task to stabilize, then get its IP
+        await new Promise(r => setTimeout(r, 10000));
+        const taskIp = await getEcsTaskPublicIp(projectData.name);
+        
+        // Update project
+        const updatePayload: any = {};
+        if (ecsUrl) {
+          updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
+        }
+        if (taskIp) {
+           updatePayload.taskIp = taskIp;
+        }
+        if (Object.keys(updatePayload).length > 0) {
+           await projectRef.update(updatePayload);
+        }
+        
+        // Update deployment status
+        await newDeploymentRef.update({ status: 'SUCCESS' });
+        
+      } catch (err) {
+        console.error('Rollback failed:', err);
+        await newDeploymentRef.update({ status: 'FAILED' });
+      }
+    })();
+    
+  } catch (error) {
+    console.error('Error rolling back project:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

@@ -54,14 +54,14 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
   const handleRedeploy = async () => {
     if (!project) return;
     setRedeploying(true);
-    
+
     try {
       const token = localStorage.getItem('bravocloud_token');
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${project.id}/redeploy`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (res.ok) {
         // Optimistically add a queued deployment
         setDeployments([{
@@ -76,6 +76,35 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
     } catch (error) {
       console.error('Error redeploying:', error);
       alert('Error redeploying project.');
+    } finally {
+      setRedeploying(false);
+    }
+  };
+
+  const handleRollback = async () => {
+    if (!project || deployments.length < 2) return;
+    const previousDeployment = deployments[1];
+    if (!previousDeployment || !previousDeployment.commitHash || previousDeployment.commitHash === 'redeploy-trigger' || previousDeployment.commitHash === 'manual') return;
+
+    if (!confirm('Are you sure you want to rollback to the previous deployment?')) return;
+
+    setRedeploying(true); // Reuse loading state
+
+    try {
+      const token = localStorage.getItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${apiUrl}/api/projects/${project.id}/deployments/${previousDeployment.id}/rollback`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to rollback");
+      }
+      alert("Rollback initiated successfully!");
+      fetchProjectDetails();
+    } catch (error: any) {
+      alert("Rollback failed: " + error.message);
     } finally {
       setRedeploying(false);
     }
@@ -116,7 +145,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
         <BackgroundAnimation />
 
         <div className="max-w-6xl mx-auto flex flex-col gap-6 relative z-10 w-full mt-4">
-          
+
           {/* Breadcrumbs */}
           <div className="flex items-center gap-2 text-sm text-[#71717a] font-medium">
             <button onClick={() => router.push('/dashboard')} className="hover:text-white transition-colors">Dashboard</button>
@@ -129,7 +158,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
             <div className="flex items-start gap-5">
               <div className="w-16 h-16 rounded-2xl bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative shadow-lg">
                 {publicUrl && (
-                  <img 
+                  <img
                     src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(publicUrl)}`}
                     className="w-full h-full object-cover z-10"
                     onError={(e) => {
@@ -143,14 +172,14 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
                 )}
                 <svg className="w-8 h-8 text-white absolute z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
               </div>
-              
+
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">
                   <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
                   <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase flex items-center gap-1.5
-                    ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                      isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                      'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
+                    ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                      isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                        'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
                     {isBuilding && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" />}
                     {currentStatus}
                   </span>
@@ -195,17 +224,17 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
           </div>
 
           <div className="flex flex-col lg:flex-row gap-6 items-stretch">
-            
+
             {/* Main Column - Live Preview */}
             <div className="w-full lg:w-[55%]">
               <div className="bg-[#18181b] border border-[#27272a] rounded-2xl overflow-hidden shadow-2xl relative flex flex-col group h-full min-h-[320px]">
                 <div className="absolute top-5 left-6 z-10 pointer-events-auto bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 shadow-lg">
-                   <h3 className="text-lg font-bold text-white drop-shadow-md">Production Deployment</h3>
+                  <h3 className="text-lg font-bold text-white drop-shadow-md">Production Deployment</h3>
                 </div>
                 {/* Iframe content */}
                 <div className="flex-1 bg-black relative overflow-hidden pointer-events-none">
                   {publicUrl ? (
-                    <iframe 
+                    <iframe
                       src={publicUrl}
                       className="absolute inset-0 w-full h-full border-0 bg-black"
                       title="Live Preview"
@@ -230,7 +259,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
             <div className="w-full lg:w-[45%]">
               <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-7 shadow-2xl flex flex-col gap-6 text-[#e4e4e7] h-full justify-center">
                 <h3 className="text-lg font-bold text-white mb-2">Overview</h3>
-                
+
                 {/* Deployment */}
                 <div className="flex flex-col gap-2">
                   <h4 className="text-[14px] text-[#a1a1aa]">Deployment</h4>
@@ -281,10 +310,23 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
                   </div>
                   <div className="flex items-center gap-2 text-[13px] text-[#a1a1aa]">
                     <span className="font-mono opacity-60">-o-</span>
-                    <span className="font-mono text-white">{latestDeployment?.commitHash ? latestDeployment.commitHash.substring(0,7) : 'trigger'}</span>
+                    <span className="font-mono text-white">{latestDeployment?.commitHash ? latestDeployment.commitHash.substring(0, 7) : 'trigger'}</span>
                     <span className="truncate ml-1">{project.latestCommitMessage || 'Deployed via BravoCloud'}</span>
                   </div>
                 </div>
+
+                {deployments.length > 1 && deployments[1].commitHash && deployments[1].commitHash !== 'redeploy-trigger' && deployments[1].commitHash !== 'manual' && (
+                  <div className="mt-2 pt-4 border-t border-[#27272a]/50">
+                    <button
+                      onClick={handleRollback}
+                      disabled={redeploying}
+                      className="w-full py-2.5 px-4 bg-[#27272a] hover:bg-[#3f3f46] text-[#facc15] font-semibold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-inner disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" /></svg>
+                      {redeploying ? 'Rolling Back...' : 'Rollback to Previous Version'}
+                    </button>
+                  </div>
+                )}
 
               </div>
             </div>
@@ -292,11 +334,11 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
 
           {/* Bottom Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
-            
+
             {/* Configuration */}
             <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-7 shadow-2xl flex flex-col gap-6">
               <h3 className="text-lg font-bold text-white">Configuration</h3>
-              
+
               <div className="flex flex-col gap-5">
                 <div>
                   <h4 className="text-xs font-semibold text-[#71717a] uppercase tracking-wider mb-2">GitHub Repository</h4>
@@ -329,7 +371,7 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
                     </div>
                   </div>
                 )}
-                
+
               </div>
             </div>
 
@@ -337,8 +379,8 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
             <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-7 shadow-2xl flex flex-col gap-6">
               <h3 className="text-lg font-bold text-white">Observability</h3>
               <div className="flex-1 flex flex-col items-center justify-center text-[#a1a1aa] min-h-[150px] bg-[#27272a]/10 rounded-xl border border-dashed border-[#3f3f46]">
-                 <svg className="w-8 h-8 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                 <span className="text-sm font-medium">Metrics syncing...</span>
+                <svg className="w-8 h-8 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                <span className="text-sm font-medium">Metrics syncing...</span>
               </div>
             </div>
 
@@ -346,13 +388,13 @@ export default function ProjectDetails({ params }: { params: Promise<{ id: strin
             <div className="bg-[#18181b]/60 backdrop-blur-md border border-[#27272a] rounded-2xl p-7 shadow-2xl flex flex-col gap-6">
               <h3 className="text-lg font-bold text-white">Analytics</h3>
               <div className="flex-1 flex flex-col items-center justify-center text-[#a1a1aa] min-h-[150px] bg-[#27272a]/10 rounded-xl border border-dashed border-[#3f3f46]">
-                 <svg className="w-8 h-8 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
-                 <span className="text-sm font-medium">No traffic data yet</span>
+                <svg className="w-8 h-8 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
+                <span className="text-sm font-medium">No traffic data yet</span>
               </div>
             </div>
-            
+
           </div>
-          
+
         </div>
       </div>
     </div>

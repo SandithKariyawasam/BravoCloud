@@ -39,18 +39,18 @@ export default function Dashboard() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredRepos = repos.filter(repo => 
-    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredRepos = repos.filter(repo =>
+    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (repo.description && repo.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   useEffect(() => {
     let token = localStorage.getItem("bravocloud_token");
-    
+
     // Check if token is in URL (redirect from OAuth)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get("token");
-    
+
     if (urlToken) {
       token = urlToken;
       localStorage.setItem("bravocloud_token", urlToken);
@@ -67,10 +67,10 @@ export default function Dashboard() {
 
   const fetchDashboardData = (token: string) => {
     setLoading(true);
-    
+
     const headers = { "Authorization": `Bearer ${token}` };
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    
+
     Promise.all([
       fetch(`${apiUrl}/api/github/repos`, { headers }),
       fetch(`${apiUrl}/auth/me`, { headers }),
@@ -81,10 +81,10 @@ export default function Dashboard() {
           const errorText = await userRes.text();
           throw new Error(`Auth Error: ${userRes.status} - ${errorText}`);
         }
-        
+
         const reposData = await reposRes.json();
         const userData = await userRes.json();
-        
+
         let projectsData = { projects: [] };
         if (projectsRes.ok) {
           projectsData = await projectsRes.json();
@@ -118,7 +118,7 @@ export default function Dashboard() {
         const err = await res.json();
         throw new Error(err.error || "Failed to redeploy");
       }
-      
+
       // Refresh dashboard data to show QUEUED status
       if (token) fetchDashboardData(token);
     } catch (error: any) {
@@ -196,10 +196,10 @@ export default function Dashboard() {
                       const isBuilding = status === 'QUEUED' || status === 'BUILDING';
                       const isSuccess = status === 'SUCCESS' || status === 'DEPLOYED';
                       const isFailed = status === 'FAILED';
-                      
+
                       return (
-                        <div 
-                          key={project.id} 
+                        <div
+                          key={project.id}
                           onClick={() => router.push(`/dashboard/project/${project.id}`)}
                           className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col cursor-pointer"
                         >
@@ -207,7 +207,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
                               <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative">
                                 {project.subdomain && (
-                                  <img 
+                                  <img
                                     src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`)}`}
                                     className="w-full h-full object-cover z-10"
                                     onError={(e) => {
@@ -224,14 +224,14 @@ export default function Dashboard() {
                               <h3 className="font-semibold text-lg truncate text-white">{project.name}</h3>
                             </div>
                             <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase flex items-center gap-1.5
-                              ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                                isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                                'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
+                              ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                                isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                  'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
                               {isBuilding && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" />}
                               {status}
                             </span>
                           </div>
-                          
+
                           <div className="flex flex-col gap-2 mb-6">
                             <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
                               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" /></svg>
@@ -271,10 +271,10 @@ export default function Dashboard() {
                                   </>
                                 )}
                               </button>
-                              <a 
-                                href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'} 
-                                target="_blank" 
-                                rel="noreferrer" 
+                              <a
+                                href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'}
+                                target="_blank"
+                                rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
                               >
@@ -306,7 +306,7 @@ export default function Dashboard() {
                       <p className="text-[#a1a1aa] text-lg">Select a repository from your connected GitHub account to deploy.</p>
                     </div>
                   </div>
-                  
+
                   {/* Search Bar */}
                   <div className="relative w-full md:w-72">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -333,41 +333,41 @@ export default function Dashboard() {
                   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                     {filteredRepos.length > 0 ? (
                       filteredRepos.map((repo) => (
-                      <div
-                        key={repo.id}
-                        className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <svg className="w-5 h-5 text-[#71717a] group-hover:text-white flex-shrink-0 transition-colors" fill="currentColor" viewBox="0 0 24 24">
-                              <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v16a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2H4zm8 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 8a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                            </svg>
-                            <h3 className="font-semibold text-lg truncate text-[#e4e4e7] group-hover:text-white transition-colors" title={repo.fullName}>
-                              {repo.name}
-                            </h3>
-                          </div>
-                          <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${repo.private ? 'bg-black text-[#a1a1aa] border border-[#27272a]' : 'bg-white/10 text-gray-200 border border-white/20'}`}>
-                            {repo.private ? "Private" : "Public"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#a1a1aa] mb-8 flex-1 line-clamp-2 group-hover:text-[#e4e4e7] transition-colors">
-                          {repo.description || "No description provided for this repository."}
-                        </p>
-                        <div className="flex items-center justify-between mt-auto pt-5 border-t border-[#27272a] group-hover:border-[#3f3f46] transition-colors">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold px-2 py-1 bg-[#27272a] text-[#a1a1aa] group-hover:text-white rounded-md uppercase tracking-wider transition-colors">
-                              {repo.language || "Unknown Stack"}
+                        <div
+                          key={repo.id}
+                          className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              <svg className="w-5 h-5 text-[#71717a] group-hover:text-white flex-shrink-0 transition-colors" fill="currentColor" viewBox="0 0 24 24">
+                                <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v16a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2H4zm8 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 8a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                              </svg>
+                              <h3 className="font-semibold text-lg truncate text-[#e4e4e7] group-hover:text-white transition-colors" title={repo.fullName}>
+                                {repo.name}
+                              </h3>
+                            </div>
+                            <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${repo.private ? 'bg-black text-[#a1a1aa] border border-[#27272a]' : 'bg-white/10 text-gray-200 border border-white/20'}`}>
+                              {repo.private ? "Private" : "Public"}
                             </span>
                           </div>
-                          <button 
-                            onClick={() => setSelectedRepo(repo)}
-                            className="px-5 py-2 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-all duration-200"
-                          >
-                            Import
-                          </button>
+                          <p className="text-sm text-[#a1a1aa] mb-8 flex-1 line-clamp-2 group-hover:text-[#e4e4e7] transition-colors">
+                            {repo.description || "No description provided for this repository."}
+                          </p>
+                          <div className="flex items-center justify-between mt-auto pt-5 border-t border-[#27272a] group-hover:border-[#3f3f46] transition-colors">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold px-2 py-1 bg-[#27272a] text-[#a1a1aa] group-hover:text-white rounded-md uppercase tracking-wider transition-colors">
+                                {repo.language || "Unknown Stack"}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setSelectedRepo(repo)}
+                              className="px-5 py-2 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-all duration-200"
+                            >
+                              Import
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))
                     ) : (
                       <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#a1a1aa]">
                         <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

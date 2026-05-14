@@ -63,7 +63,7 @@ export default function DeploymentsList({ deployments, isGlobal = false }: Props
                   </td>
                 </tr>
               ) : (
-                deployments.map((dep) => (
+                deployments.map((dep, index) => (
                   <tr key={dep.id} className="hover:bg-[#27272a]/20 transition-colors group">
                     {isGlobal && (
                       <td className="px-6 py-4 font-medium text-white">

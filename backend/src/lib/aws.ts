@@ -194,6 +194,7 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
 
   const listRes = await elbClient.send(new DescribeListenersCommand({ LoadBalancerArn: albArn }));
   const httpsListenerArn = listRes.Listeners?.find(l => l.Port === 443)?.ListenerArn;
+  const httpListenerArn = listRes.Listeners?.find(l => l.Port === 80)?.ListenerArn;
   if (!httpsListenerArn) throw new Error("HTTPS Listener not found");
 
   // Create Target Group for this project
@@ -232,7 +233,29 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
     }));
   } catch (ruleErr) {
     // If priority is taken or rule exists, ignore for now as it routes to the correct TG
-    console.log("Rule might already exist, proceeding...");
+    console.log("HTTPS Rule might already exist, proceeding...");
+  }
+
+  // Create HTTP to HTTPS Redirect Rule
+  if (httpListenerArn) {
+    try {
+      const httpPriority = Math.floor(Math.random() * 49999) + 1;
+      await elbClient.send(new CreateRuleCommand({
+        ListenerArn: httpListenerArn,
+        Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
+        Priority: httpPriority,
+        Actions: [{
+          Type: "redirect",
+          RedirectConfig: {
+            Protocol: "HTTPS",
+            Port: "443",
+            StatusCode: "HTTP_301"
+          }
+        }]
+      }));
+    } catch (httpRuleErr) {
+      console.log("HTTP Redirect Rule might already exist, proceeding...");
+    }
   }
 
   // 6. Create or Recreate Service
