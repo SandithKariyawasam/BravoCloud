@@ -562,7 +562,10 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     const user = userDoc.data() as any;
     if (!user?.githubToken) return res.status(400).json({ error: 'GitHub token not found' });
 
-    const [repoOwner, repoName] = projectData.githubRepo.split('/');
+    if (!projectData.repoUrl) return res.status(400).json({ error: 'Repo URL not found on project' });
+    const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+    const repoOwner = urlParts[0];
+    const repoName = urlParts[1];
     
     // Get latest deployments
     const deploymentsSnapshot = await db.collection('deployments')
