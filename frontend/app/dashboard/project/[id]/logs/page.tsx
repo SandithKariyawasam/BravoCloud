@@ -16,6 +16,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
   
   const [activeTab, setActiveTab] = useState<"build" | "runtime">("build");
   const [buildJobs, setBuildJobs] = useState<any[]>([]);
+  const [buildRawLog, setBuildRawLog] = useState<string>("");
   const [runtimeLogs, setRuntimeLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   
@@ -62,6 +63,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
           if (res.ok) {
             const data = await res.json();
             setBuildJobs(data.jobs || []);
+            setBuildRawLog(data.rawLog || "");
           }
         } else {
           const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
@@ -177,7 +179,11 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
               
               {activeTab === 'build' && (
                 <div className="flex flex-col gap-4">
-                  {buildJobs.length === 0 ? (
+                  {buildRawLog ? (
+                    <div className="font-mono text-sm text-[#e4e4e7] whitespace-pre-wrap break-all">
+                      {buildRawLog}
+                    </div>
+                  ) : buildJobs.length === 0 ? (
                     <div className="text-[#71717a] italic">Waiting for build logs...</div>
                   ) : (
                     buildJobs.map((job: any) => (

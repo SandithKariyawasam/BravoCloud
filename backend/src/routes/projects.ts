@@ -607,7 +607,26 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     if (!jobsRes.ok) return res.status(jobsRes.status).json({ error: 'Failed to fetch jobs' });
     
     const jobsData = await jobsRes.json();
-    res.json({ jobs: jobsData.jobs || [] });
+    const jobs = jobsData.jobs || [];
+    let rawLog = "";
+
+    if (jobs.length > 0) {
+      const jobId = jobs[0].id;
+      try {
+        const logRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
+          headers: {
+            'Authorization': `token ${user.githubToken}`
+          }
+        });
+        if (logRes.ok) {
+          rawLog = await logRes.text();
+        }
+      } catch (e) {
+        console.error("Error fetching raw job logs", e);
+      }
+    }
+
+    res.json({ jobs, rawLog });
 
   } catch (error) {
     console.error('Error fetching build logs:', error);
