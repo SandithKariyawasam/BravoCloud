@@ -38,19 +38,67 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     
+    // Check cache
+    const cacheKey = `bravocloud_project_cache_${projectId}`;
+    const cachedData = localStorage.getItem(cacheKey);
+    let hasCache = false;
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.project) {
+          setProject(parsed.project);
+          if (parsed.user) setUser(parsed.user);
+          setLoading(false);
+          hasCache = true;
+        }
+      } catch (e) {}
+    }
+
+    // Try to load cached logs too
+    try {
+      const cachedBuild = localStorage.getItem(`bravocloud_logs_cache_${projectId}_build`);
+      if (cachedBuild) {
+        const parsed = JSON.parse(cachedBuild);
+        if (parsed.jobs) setBuildJobs(parsed.jobs);
+        if (parsed.rawLog) setBuildRawLog(parsed.rawLog);
+      }
+      const cachedRuntime = localStorage.getItem(`bravocloud_logs_cache_${projectId}_runtime`);
+      if (cachedRuntime) {
+        const parsed = JSON.parse(cachedRuntime);
+        if (parsed.logs) setRuntimeLogs(parsed.logs);
+      }
+    } catch (e) {}
+
     // Initial fetch for project data
     Promise.all([
       fetch(`${apiUrl}/auth/me`, { headers: { "Authorization": `Bearer ${token}` } }),
       fetch(`${apiUrl}/api/projects/${projectId}`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
     .then(async ([userRes, projRes]) => {
-      if (userRes.ok) setUser((await userRes.json()).user);
-      if (projRes.ok) setProject((await projRes.json()).project);
-      setLoading(false);
+      let userData = user;
+      let projData = project;
+      
+      if (userRes.ok) {
+        const u = await userRes.json();
+        userData = u.user;
+        setUser(userData);
+      }
+      if (projRes.ok) {
+        const p = await projRes.json();
+        projData = p.project;
+        setProject(projData);
+      }
+      
+      if (projData) {
+        localStorage.setItem(cacheKey, JSON.stringify({ project: projData, user: userData }));
+      }
+      
+      if (!hasCache) setLoading(false);
     })
     .catch((err) => {
       console.error(err);
-      setLoading(false);
+      if (!hasCache) setLoading(false);
     });
 
     // Polling logic for logs
@@ -64,6 +112,10 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
             const data = await res.json();
             setBuildJobs(data.jobs || []);
             setBuildRawLog(data.rawLog || "");
+            localStorage.setItem(`bravocloud_logs_cache_${projectId}_build`, JSON.stringify({
+              jobs: data.jobs || [],
+              rawLog: data.rawLog || ""
+            }));
           }
         } else {
           const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
@@ -72,6 +124,9 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
           if (res.ok) {
             const data = await res.json();
             setRuntimeLogs(data.logs || []);
+            localStorage.setItem(`bravocloud_logs_cache_${projectId}_runtime`, JSON.stringify({
+              logs: data.logs || []
+            }));
           }
         }
       } catch (err) {
