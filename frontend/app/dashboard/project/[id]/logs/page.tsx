@@ -167,10 +167,10 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
       <div className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden bg-black p-8">
         <BackgroundAnimation />
 
-        <div className="max-w-6xl mx-auto flex flex-col gap-6 relative z-10 w-full mt-4 h-full">
+        <div className="max-w-6xl mx-auto flex flex-col gap-6 relative z-10 w-full mt-4">
           
           {/* Breadcrumbs */}
-          <div className="flex items-center gap-2 text-sm text-[#71717a] font-medium shrink-0">
+          <div className="flex items-center gap-2 text-sm text-[#71717a] font-medium">
             <button onClick={() => router.push('/dashboard')} className="hover:text-white transition-colors">Dashboard</button>
             <span>/</span>
             <button onClick={() => router.push(`/dashboard/project/${project.id}`)} className="hover:text-white transition-colors">{project.name}</button>
@@ -179,7 +179,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
           </div>
 
           {/* Header Section */}
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-[#27272a] shrink-0">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-[#27272a]">
             <div className="flex items-start gap-5">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-3">

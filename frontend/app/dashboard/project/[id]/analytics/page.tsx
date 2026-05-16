@@ -10,11 +10,11 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
   const resolvedParams = use(params);
   const projectId = resolvedParams.id;
   const router = useRouter();
-  
+
   const [project, setProject] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  
+
   const [metrics, setMetrics] = useState<any>({
     totalVisitors: 0,
     pageViews: 0,
@@ -24,7 +24,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     topDevices: [],
     errors: []
   });
-  
+
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,12 +35,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    
+
     // Check cache
     const cacheKey = `bravocloud_project_cache_${projectId}`;
     const cachedData = localStorage.getItem(cacheKey);
     let hasCache = false;
-    
+
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData);
@@ -50,7 +50,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
           setLoading(false);
           hasCache = true;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     try {
@@ -58,7 +58,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
       if (cachedMetrics) {
         setMetrics(JSON.parse(cachedMetrics));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Initial fetch
     Promise.all([
@@ -66,42 +66,42 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
       fetch(`${apiUrl}/api/projects/${projectId}`, { headers: { "Authorization": `Bearer ${token}` } }),
       fetch(`${apiUrl}/api/analytics/${projectId}`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
-    .then(async ([userRes, projRes, analyticsRes]) => {
-      let userData = user;
-      let projData = project;
-      
-      if (userRes.ok) {
-        const u = await userRes.json();
-        userData = u.user;
-        setUser(userData);
-      }
-      if (projRes.ok) {
-        const p = await projRes.json();
-        projData = p.project;
-        setProject(projData);
-      }
-      
-      if (projData) {
-        localStorage.setItem(cacheKey, JSON.stringify({ project: projData, user: userData }));
-      }
+      .then(async ([userRes, projRes, analyticsRes]) => {
+        let userData = user;
+        let projData = project;
 
-      if (analyticsRes.ok) {
-        const a = await analyticsRes.json();
-        setMetrics(a.metrics);
-        localStorage.setItem(`bravocloud_analytics_cache_${projectId}`, JSON.stringify(a.metrics));
-      }
-      
-      if (!hasCache) setLoading(false);
-    })
-    .catch((err) => {
-      console.error(err);
-      if (!hasCache) setLoading(false);
-    });
+        if (userRes.ok) {
+          const u = await userRes.json();
+          userData = u.user;
+          setUser(userData);
+        }
+        if (projRes.ok) {
+          const p = await projRes.json();
+          projData = p.project;
+          setProject(projData);
+        }
+
+        if (projData) {
+          localStorage.setItem(cacheKey, JSON.stringify({ project: projData, user: userData }));
+        }
+
+        if (analyticsRes.ok) {
+          const a = await analyticsRes.json();
+          setMetrics(a.metrics);
+          localStorage.setItem(`bravocloud_analytics_cache_${projectId}`, JSON.stringify(a.metrics));
+        }
+
+        if (!hasCache) setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!hasCache) setLoading(false);
+      });
 
   }, [projectId]);
 
   const copySnippet = () => {
-    const origin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bravo-cloud-ydew.vercel.app";
+    const origin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech";
     const snippet = `<script src="${origin}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`;
     navigator.clipboard.writeText(snippet);
     setCopied(true);
@@ -139,24 +139,34 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
   return (
     <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
       <Sidebar user={user} />
-      
-      <div className="flex-1 flex flex-col relative bg-black overflow-y-auto">
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col relative overflow-y-auto overflow-x-hidden bg-black p-8">
         <BackgroundAnimation />
-        
-        <div className="relative z-10 p-8 max-w-7xl mx-auto w-full">
-          {/* Header */}
-          <div className="mb-10">
-            <div className="flex items-center gap-3 text-sm text-[#a1a1aa] mb-2 font-medium">
-              <span className="hover:text-white cursor-pointer transition-colors">{user?.username}</span>
-              <span className="text-[#3f3f46]">/</span>
-              <span className="hover:text-white cursor-pointer transition-colors">{project?.name}</span>
-              <span className="text-[#3f3f46]">/</span>
-              <span className="text-white">Analytics</span>
+
+        <div className="max-w-6xl mx-auto flex flex-col gap-6 relative z-10 w-full mt-4">
+          
+          {/* Breadcrumbs */}
+          <div className="flex items-center gap-2 text-sm text-[#71717a] font-medium">
+            <button onClick={() => router.push('/dashboard')} className="hover:text-white transition-colors">Dashboard</button>
+            <span>/</span>
+            <button onClick={() => router.push(`/dashboard/project/${project.id}`)} className="hover:text-white transition-colors">{project.name}</button>
+            <span>/</span>
+            <span className="text-white">Analytics</span>
+          </div>
+
+          {/* Header Section */}
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-6 border-b border-[#27272a]">
+            <div className="flex items-start gap-5">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-3xl font-bold tracking-tight">Analytics & Insights</h1>
+                </div>
+                <p className="text-[#a1a1aa] max-w-2xl text-sm">
+                  View tracking insights, visitors, and runtime errors for {project.name}.
+                </p>
+              </div>
             </div>
-            <h1 className="text-4xl font-bold tracking-tight text-white flex items-center gap-3">
-              <Activity className="text-emerald-400" size={36} />
-              Analytics & Insights
-            </h1>
           </div>
 
           {/* Setup Banner */}
@@ -171,12 +181,12 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 Paste this snippet into the <code className="bg-[#18181b] px-1 py-0.5 rounded text-white border border-[#27272a]">&lt;head&gt;</code> of your application to automatically start tracking visitors, page views, and javascript errors.
               </p>
             </div>
-            
+
             <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
               <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
-                {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bravo-cloud-ydew.vercel.app"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
+                {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
               </div>
-              <button 
+              <button
                 onClick={copySnippet}
                 className="bg-white text-black px-4 py-2 rounded-md font-semibold text-sm flex items-center gap-2 hover:bg-gray-200 transition-colors shrink-0"
               >
@@ -207,7 +217,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
 
           {/* Breakdowns */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-            
+
             {/* Top Pages */}
             <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-6">
               <h3 className="text-lg font-bold text-white mb-6 border-b border-[#27272a] pb-4 flex items-center gap-2">
@@ -313,7 +323,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                 Failed Features & Exceptions
               </h3>
             </div>
-            
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
