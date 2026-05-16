@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
 import DeploymentsList from "../../../../components/DeploymentsList";
 
-export default function ProjectDeploymentsPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const projectId = resolvedParams.id;
+export default function ProjectDeploymentsPage() {
+  const params = useParams();
+  const projectId = params?.id as string;
   const router = useRouter();
   const [project, setProject] = useState<any>(null);
   const [deployments, setDeployments] = useState([]);
@@ -58,7 +58,12 @@ export default function ProjectDeploymentsPage({ params }: { params: Promise<{ i
       let depsList = [];
       
       if (userRes.ok) userObj = (await userRes.json()).user;
-      if (projRes.ok) projObj = (await projRes.json()).project;
+      if (projRes.ok) {
+        projObj = (await projRes.json()).project;
+      } else {
+        router.push('/dashboard');
+        return;
+      }
       if (depsRes.ok) depsList = (await depsRes.json()).deployments || [];
       
       if (userObj) setUser(userObj);
@@ -73,7 +78,7 @@ export default function ProjectDeploymentsPage({ params }: { params: Promise<{ i
     })
     .catch((err) => {
       console.error(err);
-      setLoading(false);
+      router.push('/dashboard');
     });
   };
 

@@ -11,6 +11,7 @@ const auth_1 = __importDefault(require("./routes/auth"));
 const github_1 = __importDefault(require("./routes/github"));
 const projects_1 = __importDefault(require("./routes/projects"));
 const deployments_1 = __importDefault(require("./routes/deployments"));
+const analytics_1 = __importDefault(require("./routes/analytics"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
@@ -25,6 +26,7 @@ app.use('/auth', auth_1.default);
 app.use('/api/github', github_1.default);
 app.use('/api/projects', projects_1.default);
 app.use('/api/deployments', deployments_1.default);
+app.use('/api/analytics', analytics_1.default);
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
 });

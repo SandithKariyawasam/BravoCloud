@@ -87,7 +87,7 @@ export default function DeploymentsList({ deployments, isGlobal = false }: Props
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-[#a1a1aa] whitespace-nowrap">
+                    <td className="px-6 py-4 text-[#a1a1aa] whitespace-nowrap" suppressHydrationWarning>
                       {new Date(dep.createdAt).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 text-right relative">

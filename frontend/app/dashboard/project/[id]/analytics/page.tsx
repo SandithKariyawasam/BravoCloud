@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
 import { Copy, AlertTriangle, Activity, Globe, Monitor, ShieldAlert, FileText, CheckCircle2 } from "lucide-react";
 
-export default function AnalyticsPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const projectId = resolvedParams.id;
+export default function AnalyticsPage() {
+  const params = useParams();
+  const projectId = params?.id as string;
   const router = useRouter();
 
   const [project, setProject] = useState<any>(null);
@@ -79,6 +79,9 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
           const p = await projRes.json();
           projData = p.project;
           setProject(projData);
+        } else {
+          router.push('/dashboard');
+          return;
         }
 
         if (projData) {
@@ -95,7 +98,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
       })
       .catch((err) => {
         console.error(err);
-        if (!hasCache) setLoading(false);
+        router.push('/dashboard');
       });
 
   }, [projectId]);
@@ -365,7 +368,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                             <span className="text-[10px] text-[#71717a]">{error.os}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-xs text-[#a1a1aa]">
+                        <td className="px-6 py-4 text-xs text-[#a1a1aa]" suppressHydrationWarning>
                           {new Date(error.timestamp).toLocaleString()}
                         </td>
                       </tr>

@@ -481,14 +481,15 @@ router.get('/:id/logs/build', middleware_1.verifyToken, async (req, res) => {
         // Get latest deployments
         const deploymentsSnapshot = await firebase_1.db.collection('deployments')
             .where('projectId', '==', projectId)
-            .orderBy('createdAt', 'desc')
-            .limit(1)
             .get();
         if (deploymentsSnapshot.empty)
             return res.json({ jobs: [] });
-        const latestDep = deploymentsSnapshot.docs[0].data();
+        // Sort in memory to avoid requiring a Firestore composite index
+        const deployments = deploymentsSnapshot.docs.map(doc => doc.data());
+        deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const latestDep = deployments[0];
         // We fetch all workflow runs for the repo
-        const runsRes = await (0, node_fetch_1.default)(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
+        const runsRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
             headers: {
                 'Authorization': `token ${user.githubToken}`,
                 'Accept': 'application/vnd.github.v3+json'
@@ -507,7 +508,7 @@ router.get('/:id/logs/build', middleware_1.verifyToken, async (req, res) => {
         if (!targetRun)
             return res.json({ jobs: [] });
         // Fetch jobs for that run
-        const jobsRes = await (0, node_fetch_1.default)(targetRun.jobs_url, {
+        const jobsRes = await fetchApi(targetRun.jobs_url, {
             headers: {
                 'Authorization': `token ${user.githubToken}`,
                 'Accept': 'application/vnd.github.v3+json'
@@ -521,7 +522,7 @@ router.get('/:id/logs/build', middleware_1.verifyToken, async (req, res) => {
         if (jobs.length > 0) {
             const jobId = jobs[0].id;
             try {
-                const logRes = await (0, node_fetch_1.default)(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
+                const logRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
                     headers: {
                         'Authorization': `token ${user.githubToken}`
                     }

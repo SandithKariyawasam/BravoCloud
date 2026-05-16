@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, use, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
+import { useRouter, useParams } from "next/navigation";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
 
-export default function LogsPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const projectId = resolvedParams.id;
+export default function LogsPage() {
+  const params = useParams();
+  const projectId = params?.id as string;
   const router = useRouter();
   
   const [project, setProject] = useState<any>(null);
@@ -88,6 +88,9 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
         const p = await projRes.json();
         projData = p.project;
         setProject(projData);
+      } else {
+        router.push('/dashboard');
+        return;
       }
       
       if (projData) {
@@ -98,7 +101,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
     })
     .catch((err) => {
       console.error(err);
-      if (!hasCache) setLoading(false);
+      router.push('/dashboard');
     });
 
     // Polling logic for logs
@@ -246,7 +249,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
                         <div className="font-bold text-[#3b82f6] mb-2">▶ Job: {job.name} ({job.status})</div>
                         {job.steps?.map((step: any, idx: number) => (
                           <div key={idx} className="flex gap-4">
-                            <span className="text-[#71717a] w-20 shrink-0">
+                            <span className="text-[#71717a] w-20 shrink-0" suppressHydrationWarning>
                               {step.started_at ? new Date(step.started_at).toLocaleTimeString([], { hour12: false }) : '--:--:--'}
                             </span>
                             <span className={`flex-1 ${step.status === 'in_progress' ? 'text-[#eab308] animate-pulse' : step.conclusion === 'failure' ? 'text-[#ef4444]' : 'text-[#e4e4e7]'}`}>
@@ -270,7 +273,7 @@ export default function LogsPage({ params }: { params: Promise<{ id: string }> }
                   ) : (
                     runtimeLogs.map((log: any, idx: number) => (
                       <div key={idx} className="flex gap-4 hover:bg-[#27272a]/30 px-2 py-0.5 rounded">
-                        <span className="text-[#71717a] w-24 shrink-0">
+                        <span className="text-[#71717a] w-24 shrink-0" suppressHydrationWarning>
                           {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
                         </span>
                         <span className="flex-1 break-all">

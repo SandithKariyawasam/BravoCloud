@@ -1,7 +1,7 @@
 import express from 'express';
 import { db } from '../lib/firebase';
 import { verifyToken } from '../lib/middleware';
-import UAParser from 'ua-parser-js';
+import { UAParser } from 'ua-parser-js';
 
 const router = express.Router();
 
@@ -27,7 +27,7 @@ router.post('/track', async (req: any, res: any) => {
     
     // Determine OS and Device
     const os = result.os.name || 'Unknown OS';
-    let deviceType = result.device.type || 'desktop';
+    let deviceType: any = result.device.type || 'desktop';
     if (deviceType === 'desktop' && result.os.name === 'Mac OS') deviceType = 'desktop'; // Fallback
     if (!result.device.type) {
       if (['Windows', 'Mac OS', 'Linux'].includes(os)) deviceType = 'desktop';

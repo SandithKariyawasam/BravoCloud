@@ -580,7 +580,7 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     const latestDep = deployments[0];
     
     // We fetch all workflow runs for the repo
-    const runsRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
+    const runsRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
       headers: {
         'Authorization': `token ${user.githubToken}`,
         'Accept': 'application/vnd.github.v3+json'
@@ -601,7 +601,7 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     if (!targetRun) return res.json({ jobs: [] });
 
     // Fetch jobs for that run
-    const jobsRes = await fetch(targetRun.jobs_url, {
+    const jobsRes = await fetchApi(targetRun.jobs_url, {
       headers: {
         'Authorization': `token ${user.githubToken}`,
         'Accept': 'application/vnd.github.v3+json'
@@ -617,7 +617,7 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     if (jobs.length > 0) {
       const jobId = jobs[0].id;
       try {
-        const logRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
+        const logRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
           headers: {
             'Authorization': `token ${user.githubToken}`
           }

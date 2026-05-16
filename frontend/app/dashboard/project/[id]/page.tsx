@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
 
-export default function ProjectDetails({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const projectId = resolvedParams.id;
+export default function ProjectDetails() {
+  const params = useParams();
+  const projectId = params?.id as string;
   const router = useRouter();
   const [project, setProject] = useState<any>(null);
   const [deployments, setDeployments] = useState<any[]>([]);

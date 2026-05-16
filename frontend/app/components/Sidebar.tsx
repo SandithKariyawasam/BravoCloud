@@ -53,7 +53,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     } else if (isAnalyticsPage) {
       setActiveItem("Analytics");
     } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage)) {
-      setActiveItem(isProjectView ? "Overview" : "Overview");
+      setActiveItem(isProjectView ? "Overview" : "Projects");
     }
   }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
@@ -88,8 +88,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
         {/* MAIN VIEW */}
         {(q || view === "main") && (
           <nav className={`px-2 space-y-0.5 ${!q && "mt-1 animate-slide-in"}`}>
-            <SidebarItem icon={<LayoutGrid size={16} />} label={isProjectView ? "Overview" : "Projects"} active={!q && view === "main" && activeItem === "Projects"} onClick={() => {
-              handleSelect("main", setActiveItem, "Projects");
+            <SidebarItem icon={<LayoutGrid size={16} />} label={isProjectView ? "Overview" : "Projects"} active={!q && view === "main" && (activeItem === "Projects" || activeItem === "Overview")} onClick={() => {
+              handleSelect("main", setActiveItem, isProjectView ? "Overview" : "Projects");
               if (isProjectView && projectId) {
                 router.push(`/dashboard/project/${projectId}`);
               } else {
