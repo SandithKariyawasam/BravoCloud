@@ -55,7 +55,11 @@ router.post('/track', async (req: any, res: any) => {
       timestamp: new Date().toISOString()
     };
 
-    await db.collection('analytics_events').add(event);
+    if (type === 'vital') {
+      await db.collection('speed_insights_events').add(event);
+    } else {
+      await db.collection('analytics_events').add(event);
+    }
 
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -239,6 +243,29 @@ router.get('/script.js', (req: any, res: any) => {
           message: event.reason ? event.reason.toString() : 'Unhandled Promise Rejection'
         });
       });
+
+      // Load Web Vitals
+      var wvScript = document.createElement('script');
+      wvScript.src = 'https://unpkg.com/web-vitals@3/dist/web-vitals.iife.js';
+      wvScript.onload = function() {
+        if (window.webVitals) {
+          function sendVital(metric) {
+            sendEvent('vital', {
+              name: metric.name,
+              value: metric.value,
+              rating: metric.rating,
+              id: metric.id
+            });
+          }
+          window.webVitals.onCLS(sendVital);
+          window.webVitals.onFID(sendVital);
+          window.webVitals.onLCP(sendVital);
+          window.webVitals.onINP(sendVital);
+          window.webVitals.onFCP(sendVital);
+          window.webVitals.onTTFB(sendVital);
+        }
+      };
+      document.head.appendChild(wvScript);
 
     })();
   `;

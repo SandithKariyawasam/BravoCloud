@@ -40,6 +40,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isDeploymentsPage = pathname?.endsWith('/deployments');
   const isLogsPage = pathname?.endsWith('/logs');
   const isAnalyticsPage = pathname?.endsWith('/analytics');
+  const isSpeedInsightsPage = pathname?.endsWith('/speed-insights');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [activeItem, setActiveItem] = useState<string>("Projects");
@@ -52,10 +53,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Logs");
     } else if (isAnalyticsPage) {
       setActiveItem("Analytics");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage)) {
+    } else if (isSpeedInsightsPage) {
+      setActiveItem("Speed Insights");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -120,7 +123,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 }} q={q} category="Main" />
               </>
             )}
-            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
+            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
+              handleSelect("main", setActiveItem, "Speed Insights");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/speed-insights`);
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
             <SidebarItem icon={<Shield size={16} />} label="Firewall" active={!q && view === "main" && activeItem === "Firewall"} onClick={() => handleSelect("main", setActiveItem, "Firewall")} q={q} category="Main" />
             <SidebarItem icon={<Globe size={16} />} label="CDN" active={!q && view === "main" && activeItem === "CDN"} onClick={() => handleSelect("main", setActiveItem, "CDN")} q={q} category="Main" />
