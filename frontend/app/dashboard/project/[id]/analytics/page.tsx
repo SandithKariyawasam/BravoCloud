@@ -172,32 +172,34 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Setup Banner */}
-          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-6 mb-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-blue-500/5 z-0" />
-            <div className="relative z-10">
-              <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-                <Monitor className="text-blue-400" size={20} />
-                Setup Tracking
-              </h2>
-              <p className="text-sm text-[#a1a1aa] max-w-2xl">
-                Paste this snippet into the <code className="bg-[#18181b] px-1 py-0.5 rounded text-white border border-[#27272a]">&lt;head&gt;</code> of your application to automatically start tracking visitors, page views, and javascript errors.
-              </p>
-            </div>
-
-            <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
-              <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
-                {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
+          {/* Setup Banner (Hidden if tracking is active) */}
+          {metrics.pageViews === 0 && (
+            <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-6 mb-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-blue-500/5 z-0" />
+              <div className="relative z-10">
+                <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                  <Monitor className="text-blue-400" size={20} />
+                  Setup Tracking
+                </h2>
+                <p className="text-sm text-[#a1a1aa] max-w-2xl">
+                  Paste this snippet into the <code className="bg-[#18181b] px-1 py-0.5 rounded text-white border border-[#27272a]">&lt;head&gt;</code> of your application to automatically start tracking visitors, page views, and javascript errors.
+                </p>
               </div>
-              <button
-                onClick={copySnippet}
-                className="bg-white text-black px-4 py-2 rounded-md font-semibold text-sm flex items-center gap-2 hover:bg-gray-200 transition-colors shrink-0"
-              >
-                {copied ? <CheckCircle2 size={16} className="text-green-600" /> : <Copy size={16} />}
-                {copied ? "Copied" : "Copy"}
-              </button>
+
+              <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
+                <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
+                  {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
+                </div>
+                <button
+                  onClick={copySnippet}
+                  className="bg-white text-black px-4 py-2 rounded-md font-semibold text-sm flex items-center gap-2 hover:bg-gray-200 transition-colors shrink-0"
+                >
+                  {copied ? <CheckCircle2 size={16} className="text-green-600" /> : <Copy size={16} />}
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Metric Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">

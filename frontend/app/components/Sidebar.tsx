@@ -121,14 +121,14 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                     router.push(`/dashboard/project/${projectId}/analytics`);
                   }
                 }} q={q} category="Main" />
+                <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
+                  handleSelect("main", setActiveItem, "Speed Insights");
+                  if (projectId) {
+                    router.push(`/dashboard/project/${projectId}/speed-insights`);
+                  }
+                }} q={q} category="Main" />
               </>
             )}
-            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
-              handleSelect("main", setActiveItem, "Speed Insights");
-              if (projectId) {
-                router.push(`/dashboard/project/${projectId}/speed-insights`);
-              }
-            }} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
             <SidebarItem icon={<Shield size={16} />} label="Firewall" active={!q && view === "main" && activeItem === "Firewall"} onClick={() => handleSelect("main", setActiveItem, "Firewall")} q={q} category="Main" />
             <SidebarItem icon={<Globe size={16} />} label="CDN" active={!q && view === "main" && activeItem === "CDN"} onClick={() => handleSelect("main", setActiveItem, "CDN")} q={q} category="Main" />

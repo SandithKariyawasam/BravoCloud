@@ -2,8 +2,12 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import { Monitor, Copy, CheckCircle2 } from "lucide-react";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
+import { ComposableMap, Geographies, Geography, ZoomableGroup } from "react-simple-maps";
+
+const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 
 
@@ -29,12 +33,32 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
   const [chartData, setChartData] = useState<any[]>([]);
   const [thresholds, setThresholds] = useState({ poor: 0, needsImprovement: 0, great: 0 });
   const [topCountries, setTopCountries] = useState<any[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [isFetchingMetric, setIsFetchingMetric] = useState(false);
+
+  const copySnippet = () => {
+    const origin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech";
+    const snippet = `<script src="${origin}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`;
+    navigator.clipboard.writeText(snippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("bravocloud_token");
     if (!token) {
       window.location.href = "/";
       return;
+    }
+
+    // Instantly load from sessionStorage cache if available
+    const cachedUser = sessionStorage.getItem("bravocloud_user");
+    const cachedProject = sessionStorage.getItem(`bravocloud_project_${projectId}`);
+    
+    if (cachedUser && cachedProject) {
+      setUser(JSON.parse(cachedUser));
+      setProject(JSON.parse(cachedProject));
+      setLoading(false);
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -44,8 +68,16 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
       fetch(`${apiUrl}/api/projects/${projectId}`, { headers: { "Authorization": `Bearer ${token}` } })
     ])
     .then(async ([userRes, projRes]) => {
-      if (userRes.ok) setUser((await userRes.json()).user);
-      if (projRes.ok) setProject((await projRes.json()).project);
+      if (userRes.ok) {
+        const userData = (await userRes.json()).user;
+        setUser(userData);
+        sessionStorage.setItem("bravocloud_user", JSON.stringify(userData));
+      }
+      if (projRes.ok) {
+        const projData = (await projRes.json()).project;
+        setProject(projData);
+        sessionStorage.setItem(`bravocloud_project_${projectId}`, JSON.stringify(projData));
+      }
       setLoading(false);
     })
     .catch((err) => {
@@ -58,6 +90,19 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
     const token = localStorage.getItem("bravocloud_token");
     if (!token || !projectId) return;
 
+    // Instantly load from sessionStorage cache if available and skip fetch
+    const cacheKey = `bravocloud_speed_insights_${projectId}_${activeMetric}`;
+    const cachedDataStr = sessionStorage.getItem(cacheKey);
+    
+    if (cachedDataStr) {
+      const data = JSON.parse(cachedDataStr);
+      if (data.chartData) setChartData(data.chartData);
+      if (data.thresholds) setThresholds(data.thresholds);
+      if (data.topCountries) setTopCountries(data.topCountries);
+      return;
+    }
+
+    setIsFetchingMetric(true);
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
     
     fetch(`${apiUrl}/api/speed-insights/${projectId}?metric=${encodeURIComponent(activeMetric)}`, {
@@ -65,11 +110,13 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
     })
     .then(res => res.json())
     .then(data => {
+      sessionStorage.setItem(cacheKey, JSON.stringify(data));
       if (data.chartData) setChartData(data.chartData);
       if (data.thresholds) setThresholds(data.thresholds);
       if (data.topCountries) setTopCountries(data.topCountries);
     })
-    .catch(err => console.error("Failed to load speed insights data:", err));
+    .catch(err => console.error("Failed to load speed insights data:", err))
+    .finally(() => setIsFetchingMetric(false));
     
   }, [activeMetric, projectId]);
 
@@ -125,6 +172,35 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
             </div>
           </div>
 
+          {/* Setup Banner (Hidden if tracking is active) */}
+          {(thresholds.poor + thresholds.needsImprovement + thresholds.great === 0) && (
+            <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-6 mb-2 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 z-0" />
+              <div className="relative z-10">
+                <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                  <Monitor className="text-purple-400" size={20} />
+                  Setup Speed Insights
+                </h2>
+                <p className="text-sm text-[#a1a1aa] max-w-2xl">
+                  Paste this snippet into the <code className="bg-[#18181b] px-1 py-0.5 rounded text-white border border-[#27272a]">&lt;head&gt;</code> of your application. It automatically loads Web Vitals to start gathering performance metrics.
+                </p>
+              </div>
+
+              <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
+                <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
+                  {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://www.bravocloud.tech"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
+                </div>
+                <button
+                  onClick={copySnippet}
+                  className="bg-white text-black px-4 py-2 rounded-md font-semibold text-sm flex items-center gap-2 hover:bg-gray-200 transition-colors shrink-0"
+                >
+                  {copied ? <CheckCircle2 size={16} className="text-green-600" /> : <Copy size={16} />}
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Speed Insights UI Grid */}
           <div className="flex flex-col lg:flex-row gap-6 mt-2">
             
@@ -155,7 +231,10 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <div className="text-xs text-[#a1a1aa] mb-1">Desktop</div>
-                    <h2 className="text-2xl font-bold">{activeMetric}</h2>
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                      {activeMetric}
+                      {isFetchingMetric && <svg className="animate-spin h-4 w-4 text-[#a1a1aa]" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
+                    </h2>
                     <p className="text-[#a1a1aa] text-sm mt-4 max-w-md">
                       Measures the overall user experience. To provide a good user experience, pages should have optimal scores.
                     </p>
@@ -292,19 +371,59 @@ export default function ProjectSpeedInsightsPage({ params }: { params: Promise<{
                   Countries
                 </div>
                 <div className="flex flex-col md:flex-row">
-                  <div className="w-full md:w-2/3 p-6 bg-[#09090b] flex items-center justify-center relative min-h-[300px]">
-                    {/* CSS World Map visualization */}
-                    <div className="absolute inset-0 opacity-20" style={{
-                      backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1000 500\'%3E%3Cpath fill=\'%23ffffff\' d=\'M257.6,128.6c-1.3,0.3-2.6,0.6-3.8,1.1c-1.1,0.4-2.1,1.1-2.9,2c-0.8,0.9-1.4,2-1.8,3.2c-0.4,1.2-0.5,2.5-0.5,3.8 c0,1.3,0.2,2.6,0.5,3.8c0.4,1.2,1,2.3,1.8,3.2c0.8,0.9,1.8,1.6,2.9,2c1.2,0.5,2.5,0.8,3.8,1.1c1.3,0.3,2.7,0.4,4.1,0.4 c1.4,0,2.8-0.1,4.1-0.4c1.3-0.3,2.6-0.6,3.8-1.1c1.1-0.4,2.1-1.1,2.9-2c0.8-0.9,1.4-2,1.8-3.2c0.4-1.2,0.5-2.5,0.5-3.8 c0-1.3-0.2-2.6-0.5-3.8c-0.4-1.2-1-2.3-1.8-3.2c-0.8-0.9-1.8-1.6-2.9-2c-1.2-0.5-2.5-0.8-3.8-1.1c-1.3-0.3-2.7-0.4-4.1-0.4 C260.3,128.2,258.9,128.3,257.6,128.6z M257.6,128.6\'/%3E%3Ccircle cx=\'500\' cy=\'250\' r=\'200\' fill=\'none\' stroke=\'%23ffffff\' stroke-width=\'1\'/%3E%3C/svg%3E")',
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center'
-                    }}></div>
-                    
-                    {/* We simulate "Real Data" dots on the map */}
-                    <div className="absolute top-[30%] left-[20%] w-2 h-2 rounded-full bg-[#22c55e] shadow-[0_0_10px_#22c55e]"></div>
-                    <div className="absolute top-[40%] left-[25%] w-2 h-2 rounded-full bg-[#22c55e] shadow-[0_0_10px_#22c55e]"></div>
-                    <div className="absolute top-[25%] left-[50%] w-2 h-2 rounded-full bg-[#eab308] shadow-[0_0_10px_#eab308]"></div>
-                    <div className="absolute top-[35%] left-[70%] w-2 h-2 rounded-full bg-[#ef4444] shadow-[0_0_10px_#ef4444]"></div>
+                  <div className="w-full md:w-2/3 p-0 bg-[#09090b] flex items-center justify-center relative min-h-[300px] overflow-hidden">
+                    <div className="w-full h-full opacity-60 hover:opacity-100 transition-opacity duration-500 cursor-grab active:cursor-grabbing">
+                      <ComposableMap
+                        projectionConfig={{ scale: 170 }}
+                        width={800}
+                        height={400}
+                        style={{ width: "100%", height: "100%" }}
+                      >
+                        <ZoomableGroup 
+                          zoom={1} 
+                          minZoom={1} 
+                          maxZoom={8}
+                          translateExtent={[
+                            [0, 0],
+                            [800, 400]
+                          ]}
+                        >
+                          <Geographies geography={geoUrl}>
+                            {({ geographies }) =>
+                              geographies.map((geo) => {
+                                // Check if this country is in our topCountries list
+                                const countryData = topCountries.find(
+                                  (c) => c.name.toLowerCase() === geo.properties.name.toLowerCase()
+                                );
+
+                                // Color based on score if data exists
+                                let fillColor = "#27272a"; // Default dark gray
+                                if (countryData) {
+                                  if (countryData.score > 90) fillColor = "#22c55e"; // Green
+                                  else if (countryData.score >= 50) fillColor = "#eab308"; // Yellow
+                                  else fillColor = "#ef4444"; // Red
+                                }
+
+                                return (
+                                  <Geography
+                                    key={geo.rsmKey}
+                                    geography={geo}
+                                    fill={fillColor}
+                                    stroke="#18181b"
+                                    strokeWidth={0.5}
+                                    style={{
+                                      default: { outline: "none" },
+                                      hover: { fill: "#3f3f46", outline: "none" },
+                                      pressed: { outline: "none" },
+                                    }}
+                                  />
+                                );
+                              })
+                            }
+                          </Geographies>
+                        </ZoomableGroup>
+                      </ComposableMap>
+                    </div>
                   </div>
                   
                   <div className="w-full md:w-1/3 border-l border-[#27272a] flex flex-col">
