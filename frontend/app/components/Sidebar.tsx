@@ -43,10 +43,21 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isSpeedInsightsPage = pathname?.endsWith('/speed-insights');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
-  const [activeItem, setActiveItem] = useState<string>("Projects");
+  const [isMounted, setIsMounted] = useState(false);
+  const [activeItem, setActiveItem] = useState<string>(() => {
+    if (isDeploymentsPage) return "Deployments";
+    if (isLogsPage) return "Logs";
+    if (isAnalyticsPage) return "Analytics";
+    if (isSpeedInsightsPage) return "Speed Insights";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage)) {
+      return isProjectView ? "Overview" : "Projects";
+    }
+    return "Projects";
+  });
 
   // Sync active item with URL
   useEffect(() => {
+    setIsMounted(true);
     if (isDeploymentsPage) {
       setActiveItem("Deployments");
     } else if (isLogsPage) {
@@ -90,7 +101,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       <div className="flex-1 overflow-y-auto custom-sidebar-scrollbar pb-4">
         {/* MAIN VIEW */}
         {(q || view === "main") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "mt-1 animate-slide-in"}`}>
+          <nav className={`px-2 space-y-0.5 ${!q && "mt-1"}`}>
             <SidebarItem icon={<LayoutGrid size={16} />} label={isProjectView ? "Overview" : "Projects"} active={!q && view === "main" && (activeItem === "Projects" || activeItem === "Overview")} onClick={() => {
               handleSelect("main", setActiveItem, isProjectView ? "Overview" : "Projects");
               if (isProjectView && projectId) {
@@ -129,9 +140,9 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 }} q={q} category="Main" />
               </>
             )}
-            <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
-            <SidebarItem icon={<Shield size={16} />} label="Firewall" active={!q && view === "main" && activeItem === "Firewall"} onClick={() => handleSelect("main", setActiveItem, "Firewall")} q={q} category="Main" />
-            <SidebarItem icon={<Globe size={16} />} label="CDN" active={!q && view === "main" && activeItem === "CDN"} onClick={() => handleSelect("main", setActiveItem, "CDN")} q={q} category="Main" />
+            <SidebarItem icon={<Eye size={16} />} label="Observability" badge="Soon" q={q} category="Main" />
+            <SidebarItem icon={<Shield size={16} />} label="Firewall" badge="Soon" q={q} category="Main" />
+            <SidebarItem icon={<Globe size={16} />} label="CDN" badge="Soon" q={q} category="Main" />
 
             {!q && <div className="h-px bg-[#27272a]/50 my-3 mx-2" />}
 
@@ -153,7 +164,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* OBSERVABILITY VIEW */}
         {(q || view === "observability") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -193,7 +204,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* AI GATEWAY VIEW */}
         {(q || view === "ai-gateway") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -218,7 +229,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* SETTINGS VIEW */}
         {(q || view === "settings") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -251,7 +262,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       {user && (
         <div className="p-4 border-t border-[#27272a]/40 bg-black relative">
           {isDropdownOpen && setIsDropdownOpen && onLogout && (
-            <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden animate-slide-in">
+            <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden">
               <button
                 onClick={onLogout}
                 className="w-full text-left px-4 py-3 text-sm text-[#a1a1aa] hover:bg-[#27272a] hover:text-white transition-colors flex items-center gap-2 font-medium"
@@ -320,9 +331,9 @@ function SidebarItem({
         if (onClick) onClick();
       }}
       href="#"
-      className={`group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-200 cursor-pointer ${active
-          ? 'bg-[#27272a] text-white font-medium'
-          : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-white border border-transparent'
+      className={`group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-200 cursor-pointer outline-none border ${active
+          ? 'bg-[#27272a] text-white font-medium border-[#27272a]'
+          : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-white border-transparent'
         }`}
     >
       <div className="flex items-center gap-3">
