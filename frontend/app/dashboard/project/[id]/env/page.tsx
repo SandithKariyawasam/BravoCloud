@@ -93,6 +93,16 @@ export default function ProjectEnvPage({ params }: { params: Promise<{ id: strin
   };
 
   const handleSave = async () => {
+    let finalEnvVars = { ...envVars };
+    
+    // Automatically add pending input if user forgot to click Plus
+    if (newKey.trim()) {
+      finalEnvVars[newKey.trim()] = newValue.trim();
+      setEnvVars(finalEnvVars);
+      setNewKey("");
+      setNewValue("");
+    }
+
     setSaving(true);
     const token = localStorage.getItem("bravocloud_token");
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -104,13 +114,13 @@ export default function ProjectEnvPage({ params }: { params: Promise<{ id: strin
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ envVars })
+        body: JSON.stringify({ envVars: finalEnvVars })
       });
 
       if (res.ok) {
         // Update local session storage cache with the new project data
         if (project) {
-          const updatedProject = { ...project, envVars };
+          const updatedProject = { ...project, envVars: finalEnvVars };
           setProject(updatedProject);
           sessionStorage.setItem(`bravocloud_project_${projectId}`, JSON.stringify(updatedProject));
         }
