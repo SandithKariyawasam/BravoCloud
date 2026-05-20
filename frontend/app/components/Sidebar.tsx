@@ -42,6 +42,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isAnalyticsPage = pathname?.endsWith('/analytics');
   const isSpeedInsightsPage = pathname?.endsWith('/speed-insights');
   const isEnvPage = pathname?.endsWith('/env');
+  const isDomainsPage = pathname?.endsWith('/domains');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [isMounted, setIsMounted] = useState(false);
@@ -51,7 +52,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     if (isAnalyticsPage) return "Analytics";
     if (isSpeedInsightsPage) return "Speed Insights";
     if (isEnvPage) return "Environment Variables";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage)) {
+    if (isDomainsPage) return "Domains";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -70,10 +72,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Speed Insights");
     } else if (isEnvPage) {
       setActiveItem("Environment Variables");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage)) {
+    } else if (isDomainsPage) {
+      setActiveItem("Domains");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -122,28 +126,30 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 router.push('/dashboard/deployments');
               }
             }} q={q} category="Main" />
-            {isProjectView && (
-              <>
-                <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
-                  handleSelect("main", setActiveItem, "Logs");
-                  if (projectId) {
-                    router.push(`/dashboard/project/${projectId}/logs`);
-                  }
-                }} q={q} category="Main" />
-                <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
-                  handleSelect("main", setActiveItem, "Analytics");
-                  if (projectId) {
-                    router.push(`/dashboard/project/${projectId}/analytics`);
-                  }
-                }} q={q} category="Main" />
-                <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
-                  handleSelect("main", setActiveItem, "Speed Insights");
-                  if (projectId) {
-                    router.push(`/dashboard/project/${projectId}/speed-insights`);
-                  }
-                }} q={q} category="Main" />
-              </>
-            )}
+            <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
+              handleSelect("main", setActiveItem, "Logs");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/logs`);
+              } else {
+                router.push('/dashboard/logs');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
+              handleSelect("main", setActiveItem, "Analytics");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/analytics`);
+              } else {
+                router.push('/dashboard/analytics');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
+              handleSelect("main", setActiveItem, "Speed Insights");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/speed-insights`);
+              } else {
+                router.push('/dashboard/speed-insights');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" badge="Soon" q={q} category="Main" />
             <SidebarItem icon={<Shield size={16} />} label="Firewall" badge="Soon" q={q} category="Main" />
             <SidebarItem icon={<Globe size={16} />} label="CDN" badge="Soon" q={q} category="Main" />
@@ -154,9 +160,18 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               handleSelect("main", setActiveItem, "Environment Variables");
               if (projectId) {
                 router.push(`/dashboard/project/${projectId}/env`);
+              } else {
+                router.push('/dashboard/env');
               }
             }} q={q} category="Main" />
-            <SidebarItem icon={<Globe2 size={16} />} label="Domains" active={!q && view === "main" && activeItem === "Domains"} onClick={() => handleSelect("main", setActiveItem, "Domains")} q={q} category="Main" />
+            <SidebarItem icon={<Globe2 size={16} />} label="Domains" active={!q && view === "main" && activeItem === "Domains"} onClick={() => {
+              handleSelect("main", setActiveItem, "Domains");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/domains`);
+              } else {
+                router.push('/dashboard/domains');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Plug size={16} />} label="Integrations" active={!q && view === "main" && activeItem === "Integrations"} onClick={() => handleSelect("main", setActiveItem, "Integrations")} q={q} category="Main" />
             <SidebarItem icon={<Database size={16} />} label="Storage" active={!q && view === "main" && activeItem === "Storage"} onClick={() => handleSelect("main", setActiveItem, "Storage")} q={q} category="Main" />
             <SidebarItem icon={<Cpu size={16} />} label="Agent" hasArrow active={!q && view === "main" && activeItem === "Agent"} onClick={() => handleSelect("main", setActiveItem, "Agent")} q={q} category="Main" />

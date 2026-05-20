@@ -4,8 +4,8 @@ import { IAMClient, GetRoleCommand, CreateRoleCommand, AttachRolePolicyCommand }
 import { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand, CreateSecurityGroupCommand, AuthorizeSecurityGroupIngressCommand, DescribeSecurityGroupsCommand, DescribeNetworkInterfacesCommand } from "@aws-sdk/client-ec2";
 import { ECSClient, CreateClusterCommand, RegisterTaskDefinitionCommand, CreateServiceCommand, ListTasksCommand, DescribeTasksCommand, UpdateServiceCommand } from "@aws-sdk/client-ecs";
 
-import { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, CreateTargetGroupCommand, CreateRuleCommand, DescribeTargetGroupsCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
-
+import { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, CreateTargetGroupCommand, CreateRuleCommand, DescribeTargetGroupsCommand, AddListenerCertificatesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ACMClient, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand } from "@aws-sdk/client-acm";
 const region = process.env.AWS_REGION || "us-east-1";
 
 // Ensure AWS credentials are set in .env
@@ -328,7 +328,101 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
     }
   }
 
-  return `https://${sanitizedName}.bravocloud.tech`;
+  return `${sanitizedName}.bravocloud.tech`;
+}
+
+export async function addCustomDomainRoute(projectName: string, domain: string): Promise<{ certArn: string, cnameName: string, cnameValue: string, albDns: string }> {
+  const { ACMClient, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand } = require("@aws-sdk/client-acm");
+  const { AddListenerCertificatesCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  
+  // 1. Request Cert
+  const acmClient = new ACMClient({ region });
+  const reqRes = await acmClient.send(new RequestCertificateCommand({
+    DomainName: domain,
+    ValidationMethod: "DNS"
+  }));
+  const certArn = reqRes.CertificateArn!;
+
+  // 2. Poll for DNS validation records
+  let cnameName = "";
+  let cnameValue = "";
+  for (let i = 0; i < 15; i++) {
+    const descRes = await acmClient.send(new DescribeCertificateCommand({ CertificateArn: certArn }));
+    const opts = descRes.Certificate?.DomainValidationOptions;
+    if (opts && opts.length > 0 && opts[0].ResourceRecord) {
+      cnameName = opts[0].ResourceRecord.Name!;
+      cnameValue = opts[0].ResourceRecord.Value!;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  if (!cnameName) {
+    throw new Error("Timeout waiting for ACM DNS validation records.");
+  }
+
+  // 3. Find ALB and Listeners
+  const elbClient = new ElasticLoadBalancingV2Client({ region });
+  const albRes = await elbClient.send(new DescribeLoadBalancersCommand({ Names: ["bravocloud-alb"] }));
+  const albArn = albRes.LoadBalancers?.[0]?.LoadBalancerArn;
+  const albDns = albRes.LoadBalancers?.[0]?.DNSName || "alb.bravocloud.tech";
+  
+  if (!albArn) throw new Error("ALB not found");
+
+  const listRes = await elbClient.send(new DescribeListenersCommand({ LoadBalancerArn: albArn }));
+  const httpsListenerArn = listRes.Listeners?.find(l => l.Port === 443)?.ListenerArn;
+  const httpListenerArn = listRes.Listeners?.find(l => l.Port === 80)?.ListenerArn;
+
+  // 4. Attach cert to Listener
+  if (httpsListenerArn) {
+    try {
+      await elbClient.send(new AddListenerCertificatesCommand({
+        ListenerArn: httpsListenerArn,
+        Certificates: [{ CertificateArn: certArn }]
+      }));
+    } catch (e: any) {
+      console.warn("Could not attach cert (maybe duplicate):", e.message);
+    }
+  }
+
+  // 5. Find Target Group
+  const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32);
+  const descTgRes = await elbClient.send(new DescribeTargetGroupsCommand({ Names: [tgName] }));
+  const tgArn = descTgRes.TargetGroups?.[0]?.TargetGroupArn;
+
+  if (!tgArn) throw new Error("Target Group not found for project");
+
+  // 6. Create Listener Rules
+  const priority = Math.floor(Math.random() * 49999) + 1;
+  if (httpsListenerArn) {
+    await elbClient.send(new CreateRuleCommand({
+      ListenerArn: httpsListenerArn,
+      Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [domain] } }],
+      Priority: priority,
+      Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
+    }));
+  }
+  if (httpListenerArn) {
+    await elbClient.send(new CreateRuleCommand({
+      ListenerArn: httpListenerArn,
+      Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [domain] } }],
+      Priority: priority + 1,
+      Actions: [{ Type: "redirect", RedirectConfig: { Protocol: "HTTPS", Port: "443", StatusCode: "HTTP_301" } }]
+    }));
+  }
+
+  return { certArn, cnameName, cnameValue, albDns };
+}
+
+export async function removeCustomDomainRoute(certArn: string): Promise<void> {
+  const { ACMClient, DeleteCertificateCommand } = require("@aws-sdk/client-acm");
+  const acmClient = new ACMClient({ region });
+  try {
+     await acmClient.send(new DeleteCertificateCommand({ CertificateArn: certArn }));
+  } catch (e: any) {
+     console.warn("Failed to delete cert:", e.message);
+  }
 }
 
 export async function getEcsTaskPublicIp(projectName: string): Promise<string | null> {

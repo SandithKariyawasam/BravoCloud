@@ -716,4 +716,81 @@ router.patch('/:id/env', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// Add custom domain
+router.post('/:id/domains', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId } = req.params;
+    const { domain } = req.body;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    if (!domain) return res.status(400).json({ error: 'Domain is required' });
+
+    const currentDomains = projectData.domains || [];
+    if (currentDomains.find((d: any) => d.domain === domain)) {
+      return res.status(400).json({ error: 'Domain already added to this project' });
+    }
+
+    const { addCustomDomainRoute } = require('../lib/aws');
+    const { certArn, cnameName, cnameValue, albDns } = await addCustomDomainRoute(projectData.name, domain);
+
+    const newDomain = {
+      domain,
+      certArn,
+      cnameName,
+      cnameValue,
+      albDns,
+      status: 'Pending Verification'
+    };
+
+    const updatedDomains = [...currentDomains, newDomain];
+    await projectRef.update({ domains: updatedDomains });
+
+    res.json({ success: true, domains: updatedDomains });
+  } catch (error: any) {
+    console.error('Error adding domain:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Remove a custom domain
+router.delete('/:id/domains/:domain', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId, domain } = req.params;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const currentDomains = projectData.domains || [];
+    const domainRecord = currentDomains.find((d: any) => d.domain === domain);
+
+    if (domainRecord) {
+      if (domainRecord.certArn) {
+        const { removeCustomDomainRoute } = require('../lib/aws');
+        await removeCustomDomainRoute(domainRecord.certArn);
+      }
+      
+      const updatedDomains = currentDomains.filter((d: any) => d.domain !== domain);
+      await projectRef.update({ domains: updatedDomains });
+      res.json({ success: true, domains: updatedDomains });
+    } else {
+      res.status(404).json({ error: 'Domain not found on this project' });
+    }
+  } catch (error: any) {
+    console.error('Error removing domain:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 export default router;
