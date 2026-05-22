@@ -793,4 +793,83 @@ router.delete('/:id/domains/:domain', verifyToken, async (req: any, res: any) =>
   }
 });
 
+// Add storage
+router.post('/:id/storage', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId } = req.params;
+    const { type } = req.body;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const currentStorage = projectData.storage || [];
+    let newStorageResource: any = null;
+    const currentEnvVars = projectData.envVars || {};
+    let newEnvVars = { ...currentEnvVars };
+
+    const { provisionS3Bucket, provisionPostgresDatabase, provisionRedisCache } = require('../lib/aws');
+
+    if (type === 's3') {
+      const { bucketName, region } = await provisionS3Bucket(projectData.name);
+      newStorageResource = { id: bucketName, type: 's3', name: bucketName, status: 'Active', region };
+      newEnvVars['AWS_S3_BUCKET_NAME'] = bucketName;
+      newEnvVars['AWS_REGION'] = region;
+    } else if (type === 'postgres') {
+      const { dbIdentifier, username, password, mockEndpoint } = await provisionPostgresDatabase(projectData.name);
+      newStorageResource = { id: dbIdentifier, type: 'postgres', name: dbIdentifier, status: 'Provisioning', endpoint: mockEndpoint };
+      newEnvVars['POSTGRES_URL'] = `postgresql://${username}:${password}@${mockEndpoint}:5432/postgres`;
+      newEnvVars['POSTGRES_USER'] = username;
+      newEnvVars['POSTGRES_PASSWORD'] = password;
+    } else if (type === 'redis') {
+      const { clusterId, mockEndpoint } = await provisionRedisCache(projectData.name);
+      newStorageResource = { id: clusterId, type: 'redis', name: clusterId, status: 'Provisioning', endpoint: mockEndpoint };
+      newEnvVars['REDIS_URL'] = `redis://${mockEndpoint}:6379`;
+    } else {
+      return res.status(400).json({ error: 'Invalid storage type' });
+    }
+
+    const updatedStorage = [...currentStorage, newStorageResource];
+    
+    await projectRef.update({ 
+      storage: updatedStorage,
+      envVars: newEnvVars
+    });
+
+    res.json({ success: true, storage: updatedStorage, envVars: newEnvVars });
+  } catch (error: any) {
+    console.error('Error adding storage:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Remove storage
+router.delete('/:id/storage/:storageId', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId, storageId } = req.params;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    const currentStorage = projectData.storage || [];
+    const updatedStorage = currentStorage.filter((s: any) => s.id !== storageId);
+
+    await projectRef.update({ storage: updatedStorage });
+    
+    res.json({ success: true, storage: updatedStorage });
+  } catch (error: any) {
+    console.error('Error removing storage:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 export default router;

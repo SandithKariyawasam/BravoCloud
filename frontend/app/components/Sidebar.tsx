@@ -43,6 +43,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isSpeedInsightsPage = pathname?.endsWith('/speed-insights');
   const isEnvPage = pathname?.endsWith('/env');
   const isDomainsPage = pathname?.endsWith('/domains');
+  const isStoragePage = pathname?.endsWith('/storage');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [isMounted, setIsMounted] = useState(false);
@@ -53,7 +54,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     if (isSpeedInsightsPage) return "Speed Insights";
     if (isEnvPage) return "Environment Variables";
     if (isDomainsPage) return "Domains";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage)) {
+    if (isStoragePage) return "Storage";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -74,10 +76,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Environment Variables");
     } else if (isDomainsPage) {
       setActiveItem("Domains");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage)) {
+    } else if (isStoragePage) {
+      setActiveItem("Storage");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -173,7 +177,14 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               }
             }} q={q} category="Main" />
             <SidebarItem icon={<Plug size={16} />} label="Integrations" active={!q && view === "main" && activeItem === "Integrations"} onClick={() => handleSelect("main", setActiveItem, "Integrations")} q={q} category="Main" />
-            <SidebarItem icon={<Database size={16} />} label="Storage" active={!q && view === "main" && activeItem === "Storage"} onClick={() => handleSelect("main", setActiveItem, "Storage")} q={q} category="Main" />
+            <SidebarItem icon={<Database size={16} />} label="Storage" active={!q && view === "main" && activeItem === "Storage"} onClick={() => {
+              handleSelect("main", setActiveItem, "Storage");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/storage`);
+              } else {
+                router.push('/dashboard/storage');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Cpu size={16} />} label="Agent" hasArrow active={!q && view === "main" && activeItem === "Agent"} onClick={() => handleSelect("main", setActiveItem, "Agent")} q={q} category="Main" />
             <SidebarItem icon={<Network size={16} />} label="AI Gateway" hasArrow onClick={() => handleSelect("ai-gateway")} q={q} category="Main" />
             <SidebarItem icon={<GitMerge size={16} />} label="Workflows" active={!q && view === "main" && activeItem === "Workflows"} onClick={() => handleSelect("main", setActiveItem, "Workflows")} q={q} category="Main" />
