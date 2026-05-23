@@ -872,4 +872,31 @@ router.delete('/:id/storage/:storageId', verifyToken, async (req: any, res: any)
   }
 });
 
+// Update workflow YAML
+router.patch('/:id/workflow', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { id: projectId } = req.params;
+    const { workflowYaml } = req.body;
+
+    if (typeof workflowYaml !== 'string') {
+      return res.status(400).json({ error: 'workflowYaml must be a string' });
+    }
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    await projectRef.update({ workflowYaml });
+
+    res.json({ success: true, workflowYaml });
+  } catch (error: any) {
+    console.error('Error updating workflow:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 export default router;
