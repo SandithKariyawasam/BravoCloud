@@ -8,6 +8,7 @@ import projectsRoutes from './routes/projects';
 import deploymentsRoutes from './routes/deployments';
 import analyticsRoutes from './routes/analytics';
 import speedInsightsRoutes from './routes/speedInsights';
+import usageRoutes from './routes/usage';
 import { db } from './lib/firebase';
 
 dotenv.config();
@@ -32,6 +33,7 @@ app.use('/api/projects', projectsRoutes);
 app.use('/api/deployments', deploymentsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/speed-insights', speedInsightsRoutes);
+app.use('/api/usage', usageRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });

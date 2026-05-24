@@ -45,6 +45,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isDomainsPage = pathname?.endsWith('/domains');
   const isStoragePage = pathname?.endsWith('/storage');
   const isWorkflowsPage = pathname?.endsWith('/workflows');
+  const isUsagePage = pathname?.endsWith('/usage');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [isMounted, setIsMounted] = useState(false);
@@ -57,7 +58,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     if (isDomainsPage) return "Domains";
     if (isStoragePage) return "Storage";
     if (isWorkflowsPage) return "Workflows";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage)) {
+    if (isUsagePage) return "Usage";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -82,10 +84,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Storage");
     } else if (isWorkflowsPage) {
       setActiveItem("Workflows");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage)) {
+    } else if (isUsagePage) {
+      setActiveItem("Usage");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isUsagePage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -202,7 +206,10 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
             {!q && <div className="h-px bg-[#27272a]/50 my-3 mx-2" />}
 
-            <SidebarItem icon={<PieChart size={16} />} label="Usage" active={!q && view === "main" && activeItem === "Usage"} onClick={() => handleSelect("main", setActiveItem, "Usage")} q={q} category="Main" />
+            <SidebarItem icon={<PieChart size={16} />} label="Usage" active={!q && view === "main" && activeItem === "Usage"} onClick={() => {
+              handleSelect("main", setActiveItem, "Usage");
+              router.push('/dashboard/usage');
+            }} q={q} category="Main" />
             <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
             <SidebarItem icon={<Settings size={16} />} label="Settings" hasArrow onClick={() => handleSelect("settings")} q={q} category="Main" />
           </nav>
