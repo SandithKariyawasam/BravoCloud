@@ -64,7 +64,7 @@ async function getOrCreateEcsExecutionRole(): Promise<string> {
   return roleArn || "";
 }
 
-export async function createEcrRepository(projectName: string): Promise<string> {
+export async function createEcrRepository(projectName: string, userId: string): Promise<string> {
   const repoName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
 
   try {
@@ -84,7 +84,8 @@ export async function createEcrRepository(projectName: string): Promise<string> 
   // Create if it doesn't exist
   const createCmd = new CreateRepositoryCommand({
     repositoryName: repoName,
-    imageScanningConfiguration: { scanOnPush: true }
+    imageScanningConfiguration: { scanOnPush: true },
+    tags: [{ Key: "BravoCloud-User", Value: userId }]
   });
 
   const createResponse = await ecrClient.send(createCmd);
@@ -486,8 +487,8 @@ export async function getEcsTaskPublicIp(projectName: string): Promise<string | 
   }
 }
 
-export async function provisionS3Bucket(projectName: string): Promise<{ bucketName: string, region: string }> {
-  const { S3Client, CreateBucketCommand, PutPublicAccessBlockCommand, PutBucketCorsCommand } = require("@aws-sdk/client-s3");
+export async function provisionS3Bucket(projectName: string, userId: string): Promise<{ bucketName: string, region: string }> {
+  const { S3Client, CreateBucketCommand, PutPublicAccessBlockCommand, PutBucketCorsCommand, PutBucketTaggingCommand } = require("@aws-sdk/client-s3");
   const s3Client = new S3Client({ region });
   const bucketName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${Math.random().toString(36).substring(2, 8)}`;
   
@@ -516,10 +517,18 @@ export async function provisionS3Bucket(projectName: string): Promise<{ bucketNa
     }
   }));
 
+  // Add tag
+  await s3Client.send(new PutBucketTaggingCommand({
+    Bucket: bucketName,
+    Tagging: {
+      TagSet: [{ Key: "BravoCloud-User", Value: userId }]
+    }
+  }));
+
   return { bucketName, region };
 }
 
-export async function provisionPostgresDatabase(projectName: string): Promise<{ dbIdentifier: string, username: string, password: string, mockEndpoint: string }> {
+export async function provisionPostgresDatabase(projectName: string, userId: string): Promise<{ dbIdentifier: string, username: string, password: string, mockEndpoint: string }> {
   const { RDSClient, CreateDBInstanceCommand } = require("@aws-sdk/client-rds");
   const rdsClient = new RDSClient({ region });
   const dbIdentifier = `bravocloud-db-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}-${Math.random().toString(36).substring(2, 6)}`;
@@ -535,7 +544,8 @@ export async function provisionPostgresDatabase(projectName: string): Promise<{ 
       DBInstanceClass: "db.t3.micro",
       MasterUsername: username,
       MasterUserPassword: password,
-      PubliclyAccessible: true
+      PubliclyAccessible: true,
+      Tags: [{ Key: "BravoCloud-User", Value: userId }]
     }));
   } catch (e: any) {
     console.warn("RDS Provisioning failed (might need subnet group), falling back to mock:", e.message);
@@ -546,7 +556,7 @@ export async function provisionPostgresDatabase(projectName: string): Promise<{ 
   return { dbIdentifier, username, password, mockEndpoint };
 }
 
-export async function provisionRedisCache(projectName: string): Promise<{ clusterId: string, mockEndpoint: string }> {
+export async function provisionRedisCache(projectName: string, userId: string): Promise<{ clusterId: string, mockEndpoint: string }> {
   const { ElastiCacheClient, CreateCacheClusterCommand } = require("@aws-sdk/client-elasticache");
   const cacheClient = new ElastiCacheClient({ region });
   const clusterId = `bravocloud-redis-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 10)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -557,7 +567,8 @@ export async function provisionRedisCache(projectName: string): Promise<{ cluste
       CacheClusterId: clusterId,
       Engine: "redis",
       CacheNodeType: "cache.t3.micro",
-      NumCacheNodes: 1
+      NumCacheNodes: 1,
+      Tags: [{ Key: "BravoCloud-User", Value: userId }]
     }));
   } catch (e: any) {
     console.warn("ElastiCache Provisioning failed, falling back to mock:", e.message);
@@ -568,7 +579,7 @@ export async function provisionRedisCache(projectName: string): Promise<{ cluste
   return { clusterId, mockEndpoint };
 }
 
-export async function getRealAWSUsage(): Promise<any[]> {
+export async function getRealAWSUsage(userId: string): Promise<any[]> {
   const { CostExplorerClient, GetCostAndUsageCommand } = require("@aws-sdk/client-cost-explorer");
   const ceClient = new CostExplorerClient({ region: "us-east-1" }); // Cost Explorer is global but API endpoint is us-east-1
 
@@ -589,7 +600,13 @@ export async function getRealAWSUsage(): Promise<any[]> {
       TimePeriod: { Start: start, End: end },
       Granularity: "MONTHLY",
       Metrics: ["UnblendedCost"],
-      GroupBy: [{ Type: "DIMENSION", Key: "SERVICE" }]
+      GroupBy: [{ Type: "DIMENSION", Key: "SERVICE" }],
+      Filter: {
+        Tags: {
+          Key: "BravoCloud-User",
+          Values: [userId]
+        }
+      }
     });
 
     const response = await ceClient.send(command);

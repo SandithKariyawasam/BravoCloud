@@ -206,11 +206,15 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
             {!q && <div className="h-px bg-[#27272a]/50 my-3 mx-2" />}
 
-            <SidebarItem icon={<PieChart size={16} />} label="Usage" active={!q && view === "main" && activeItem === "Usage"} onClick={() => {
-              handleSelect("main", setActiveItem, "Usage");
-              router.push('/dashboard/usage');
-            }} q={q} category="Main" />
-            <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
+            {!isProjectView && (
+              <>
+                <SidebarItem icon={<PieChart size={16} />} label="Usage" active={!q && view === "main" && activeItem === "Usage"} onClick={() => {
+                  handleSelect("main", setActiveItem, "Usage");
+                  router.push('/dashboard/usage');
+                }} q={q} category="Main" />
+                <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
+              </>
+            )}
             <SidebarItem icon={<Settings size={16} />} label="Settings" hasArrow onClick={() => handleSelect("settings")} q={q} category="Main" />
           </nav>
         )}

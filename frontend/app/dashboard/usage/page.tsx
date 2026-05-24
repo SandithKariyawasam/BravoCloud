@@ -148,30 +148,34 @@ export default function UsagePage() {
                 </div>
                 
                 <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-bold text-white">$20</span>
+                  <span className="text-4xl font-bold text-white">$29</span>
                   <span className="text-[#a1a1aa] text-sm">/mo per user</span>
                 </div>
 
                 <p className="text-sm text-[#e4e4e7] leading-relaxed mb-6">
-                  Scale your applications without limits. Get higher compute power, priority deployments, and dedicated support.
+                  Get full access to enterprise-grade software capabilities on top of your pay-as-you-go infrastructure.
                 </p>
 
                 <div className="flex flex-col gap-3 mb-8">
                   <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
                     <CheckCircle2 size={16} className="text-amber-500 flex-shrink-0" />
-                    <span>Unlimited Projects</span>
+                    <span>Advanced Analytics & Speed Insights</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
                     <CheckCircle2 size={16} className="text-amber-500 flex-shrink-0" />
-                    <span>1TB Global Edge Network Bandwidth</span>
+                    <span>Team Collaboration & Workspaces</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
                     <CheckCircle2 size={16} className="text-amber-500 flex-shrink-0" />
-                    <span>Dedicated PostgreSQL Instances</span>
+                    <span>GitHub Preview Deployments</span>
                   </div>
                   <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
                     <CheckCircle2 size={16} className="text-amber-500 flex-shrink-0" />
-                    <span>Priority Technical Support</span>
+                    <span>Extended 30-Day Log Retention</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
+                    <CheckCircle2 size={16} className="text-amber-500 flex-shrink-0" />
+                    <span>Advanced Firewall & Security Rules</span>
                   </div>
                 </div>
 

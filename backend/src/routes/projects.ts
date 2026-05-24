@@ -93,7 +93,7 @@ router.post('/', verifyToken, async (req: any, res: any) => {
 
     let ecrUri = '';
     try {
-      ecrUri = await createEcrRepository(projectData.name);
+      ecrUri = await createEcrRepository(projectData.name, userId);
     } catch (awsError) {
       console.error('Failed to create AWS ECR Repository:', awsError);
       return res.status(500).json({ error: 'Failed to provision AWS infrastructure' });
@@ -387,7 +387,7 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
     // Get ECR URI gracefully (returns existing without error)
     let ecrUri = '';
     try {
-      ecrUri = await createEcrRepository(projectData.name);
+      ecrUri = await createEcrRepository(projectData.name, userId);
     } catch (awsError) {
       console.error('Failed to get AWS ECR Repository:', awsError);
       return res.status(500).json({ error: 'Failed to access AWS infrastructure' });
@@ -815,18 +815,18 @@ router.post('/:id/storage', verifyToken, async (req: any, res: any) => {
     const { provisionS3Bucket, provisionPostgresDatabase, provisionRedisCache } = require('../lib/aws');
 
     if (type === 's3') {
-      const { bucketName, region } = await provisionS3Bucket(projectData.name);
+      const { bucketName, region } = await provisionS3Bucket(projectData.name, userId);
       newStorageResource = { id: bucketName, type: 's3', name: bucketName, status: 'Active', region };
       newEnvVars['AWS_S3_BUCKET_NAME'] = bucketName;
       newEnvVars['AWS_REGION'] = region;
     } else if (type === 'postgres') {
-      const { dbIdentifier, username, password, mockEndpoint } = await provisionPostgresDatabase(projectData.name);
+      const { dbIdentifier, username, password, mockEndpoint } = await provisionPostgresDatabase(projectData.name, userId);
       newStorageResource = { id: dbIdentifier, type: 'postgres', name: dbIdentifier, status: 'Provisioning', endpoint: mockEndpoint };
       newEnvVars['POSTGRES_URL'] = `postgresql://${username}:${password}@${mockEndpoint}:5432/postgres`;
       newEnvVars['POSTGRES_USER'] = username;
       newEnvVars['POSTGRES_PASSWORD'] = password;
     } else if (type === 'redis') {
-      const { clusterId, mockEndpoint } = await provisionRedisCache(projectData.name);
+      const { clusterId, mockEndpoint } = await provisionRedisCache(projectData.name, userId);
       newStorageResource = { id: clusterId, type: 'redis', name: clusterId, status: 'Provisioning', endpoint: mockEndpoint };
       newEnvVars['REDIS_URL'] = `redis://${mockEndpoint}:6379`;
     } else {

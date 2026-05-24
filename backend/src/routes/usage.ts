@@ -45,7 +45,7 @@ function whiteLabelServiceName(awsName: string): string {
 
 router.get('/', verifyToken, async (req: any, res: any) => {
   try {
-    const rawUsage = await getRealAWSUsage();
+    const rawUsage = await getRealAWSUsage(req.user.id);
 
     let totalCost = 0;
     const formattedUsage = rawUsage.map(item => {
