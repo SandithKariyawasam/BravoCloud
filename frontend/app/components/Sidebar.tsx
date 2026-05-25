@@ -296,12 +296,15 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               </div>
             )}
 
-            {[
+            {(isProjectView ? [
+              "General", "Domains", "Environment Variables", "Git",
+              "Security", "Serverless Functions", "Cron Jobs", "Edge Network", "Advanced"
+            ] : [
               "General", "Billing", "Build and Deployment", "Invoices", "Members",
               "Access Groups", "Agent", "Drains", "Alerts", "Webhooks",
               "Security & Privacy", "Deployment Protection", "Microfrontends",
               "Networking", "Activity", "My Notifications", "Apps"
-            ].map(item => (
+            ]).map(item => (
               <SidebarItem
                 key={item}
                 label={item}
