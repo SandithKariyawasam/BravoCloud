@@ -276,9 +276,15 @@ export default function ProjectStoragePage({ params }: { params: Promise<{ id: s
                           <div className="flex items-center gap-2 text-xs text-[#a1a1aa] mt-1">
                             <span className="capitalize">{item.type}</span>
                             <span>•</span>
-                            <span className="flex items-center gap-1 text-emerald-500">
-                              <CheckCircle2 size={12} /> {item.status || "Active"}
-                            </span>
+                            {item.status === 'Provisioning' ? (
+                              <span className="flex items-center gap-1 text-amber-500">
+                                <Loader2 size={12} className="animate-spin" /> Provisioning (ETA: ~5 mins)
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-emerald-500">
+                                <CheckCircle2 size={12} /> {item.status || "Active"}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
