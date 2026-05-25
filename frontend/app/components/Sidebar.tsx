@@ -46,8 +46,9 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isStoragePage = pathname?.endsWith('/storage');
   const isWorkflowsPage = pathname?.endsWith('/workflows');
   const isUsagePage = pathname?.endsWith('/usage');
+  const isSettingsPage = pathname?.endsWith('/settings');
   
-  const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
+  const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">(isSettingsPage ? "settings" : "main");
   const [isMounted, setIsMounted] = useState(false);
   const [activeItem, setActiveItem] = useState<string>(() => {
     if (isDeploymentsPage) return "Deployments";
@@ -59,7 +60,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     if (isStoragePage) return "Storage";
     if (isWorkflowsPage) return "Workflows";
     if (isUsagePage) return "Usage";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage)) {
+    if (isSettingsPage) return "Settings";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSettingsPage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -86,10 +88,14 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Workflows");
     } else if (isUsagePage) {
       setActiveItem("Usage");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage)) {
+    } else if (isSettingsPage) {
+      setActiveItem("Settings");
+      setView("settings");
+      setActiveSettingsItem("General");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSettingsPage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isUsagePage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isUsagePage, isProjectView, isSettingsPage]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -215,7 +221,14 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
               </>
             )}
-            <SidebarItem icon={<Settings size={16} />} label="Settings" hasArrow onClick={() => handleSelect("settings")} q={q} category="Main" />
+            <SidebarItem icon={<Settings size={16} />} label="Settings" active={!q && view === "main" && activeItem === "Settings"} hasArrow onClick={() => {
+              handleSelect("settings", setActiveItem, "Settings");
+              if (isProjectView && projectId) {
+                router.push(`/dashboard/project/${projectId}/settings`);
+              } else {
+                router.push('/dashboard/settings');
+              }
+            }} q={q} category="Main" />
           </nav>
         )}
 
@@ -309,7 +322,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 key={item}
                 label={item}
                 active={!q && view === "settings" && activeSettingsItem === item}
-                onClick={() => handleSelect("settings", setActiveSettingsItem, item)}
+                onClick={() => {
+                  handleSelect("settings", setActiveSettingsItem, item);
+                  if (isProjectView && item === "General") {
+                    router.push(`/dashboard/project/${projectId}/settings`);
+                  }
+                }}
                 q={q}
                 category="Settings"
               />

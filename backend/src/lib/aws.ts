@@ -643,3 +643,91 @@ export async function getRealAWSUsage(userId: string): Promise<any[]> {
     ];
   }
 }
+
+export async function deleteProjectInfrastructure(projectName: string, storageItems: any[]): Promise<void> {
+  const repoName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+  const clusterName = "bravocloud-cluster";
+  const serviceName = repoName;
+
+  // 1. Delete ECR Repository
+  try {
+    const { DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
+    await ecrClient.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+    console.log(`Deleted ECR repository: ${repoName}`);
+  } catch (e: any) {
+    if (e.name !== "RepositoryNotFoundException") {
+      console.warn(`Failed to delete ECR repository ${repoName}:`, e.message);
+    }
+  }
+
+  // 2. Delete ECS Service
+  try {
+    const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
+    await ecsClient.send(new UpdateServiceCommand({ cluster: clusterName, service: serviceName, desiredCount: 0 }));
+    await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
+    console.log(`Deleted ECS service: ${serviceName}`);
+  } catch (e: any) {
+    if (e.name !== "ServiceNotFoundException" && e.name !== "ClusterNotFoundException") {
+      console.warn(`Failed to delete ECS service ${serviceName}:`, e.message);
+    }
+  }
+
+  // 3. Iterate over storage resources
+  for (const item of storageItems) {
+    if (item.type === 's3') {
+      try {
+        const { S3Client, DeleteBucketCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+        const s3Client = new S3Client({ region });
+        
+        // Empty the bucket first
+        let hasMore = true;
+        let continuationToken = undefined;
+        while (hasMore) {
+          const listRes: any = await s3Client.send(new ListObjectsV2Command({ Bucket: item.id, ContinuationToken: continuationToken }));
+          if (listRes.Contents && listRes.Contents.length > 0) {
+            await s3Client.send(new DeleteObjectsCommand({
+              Bucket: item.id,
+              Delete: { Objects: listRes.Contents.map((obj: any) => ({ Key: obj.Key })) }
+            }));
+          }
+          hasMore = !!listRes.IsTruncated;
+          continuationToken = listRes.NextContinuationToken;
+        }
+
+        // Delete the bucket
+        await s3Client.send(new DeleteBucketCommand({ Bucket: item.id }));
+        console.log(`Deleted S3 bucket: ${item.id}`);
+      } catch (e: any) {
+        console.warn(`Failed to delete S3 bucket ${item.id}:`, e.message);
+      }
+    } else if (item.type === 'postgres') {
+      try {
+        const { RDSClient, DeleteDBInstanceCommand } = require("@aws-sdk/client-rds");
+        const rdsClient = new RDSClient({ region });
+        await rdsClient.send(new DeleteDBInstanceCommand({
+          DBInstanceIdentifier: item.id,
+          SkipFinalSnapshot: true
+        }));
+        console.log(`Deleted RDS DB: ${item.id}`);
+      } catch (e: any) {
+        if (e.name !== "DBInstanceNotFoundFault") {
+          console.warn(`Failed to delete RDS DB ${item.id}:`, e.message);
+        }
+      }
+    } else if (item.type === 'redis') {
+      try {
+        const { ElastiCacheClient, DeleteCacheClusterCommand } = require("@aws-sdk/client-elasticache");
+        const cacheClient = new ElastiCacheClient({ region });
+        await cacheClient.send(new DeleteCacheClusterCommand({
+          CacheClusterId: item.id
+        }));
+        console.log(`Deleted Redis Cluster: ${item.id}`);
+      } catch (e: any) {
+        if (e.name !== "CacheClusterNotFoundFault") {
+          console.warn(`Failed to delete Redis Cluster ${item.id}:`, e.message);
+        }
+      }
+    }
+  }
+}
+

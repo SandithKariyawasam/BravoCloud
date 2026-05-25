@@ -898,5 +898,79 @@ router.patch('/:id/workflow', verifyToken, async (req: any, res: any) => {
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
+// Update project metadata
+router.patch('/:id', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+    const updates = req.body;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    // Filter allowed fields
+    const allowedFields = ['name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir'];
+    const filteredUpdates: any = {};
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        filteredUpdates[key] = updates[key] === "" ? null : updates[key];
+      }
+    }
+
+    if (Object.keys(filteredUpdates).length > 0) {
+      await projectRef.update(filteredUpdates);
+    }
+
+    const updatedDoc = await projectRef.get();
+    res.json({ success: true, project: updatedDoc.data() });
+  } catch (error: any) {
+    console.error('Error updating project:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Delete project
+router.delete('/:id', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectDoc = await projectRef.get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    // 1. Delete AWS Infrastructure
+    const { deleteProjectInfrastructure } = require('../lib/aws');
+    try {
+      await deleteProjectInfrastructure(projectData.name, projectData.storage || []);
+    } catch (awsError) {
+      console.error('Error during AWS teardown:', awsError);
+      // We log but continue deletion to ensure BravoCloud state is cleaned up
+    }
+
+    // 2. Delete Project Document
+    await projectRef.delete();
+
+    // 3. Delete Deployments
+    const deploymentsSnapshot = await db.collection('deployments').where('projectId', '==', projectId).get();
+    const batch = db.batch();
+    deploymentsSnapshot.docs.forEach((doc: any) => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting project:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
 
 export default router;
