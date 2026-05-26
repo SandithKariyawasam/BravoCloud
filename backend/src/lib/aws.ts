@@ -535,21 +535,17 @@ export async function provisionPostgresDatabase(projectName: string, userId: str
   const username = "postgres";
   const password = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + "!";
   
-  try {
-    // Attempt real provisioning
-    await rdsClient.send(new CreateDBInstanceCommand({
-      DBInstanceIdentifier: dbIdentifier,
-      Engine: "postgres",
-      AllocatedStorage: 20,
-      DBInstanceClass: "db.t3.micro",
-      MasterUsername: username,
-      MasterUserPassword: password,
-      PubliclyAccessible: true,
-      Tags: [{ Key: "BravoCloud-User", Value: userId }]
-    }));
-  } catch (e: any) {
-    console.warn("RDS Provisioning failed (might need subnet group), falling back to mock:", e.message);
-  }
+  // Real provisioning
+  await rdsClient.send(new CreateDBInstanceCommand({
+    DBInstanceIdentifier: dbIdentifier,
+    Engine: "postgres",
+    AllocatedStorage: 20,
+    DBInstanceClass: "db.t3.micro",
+    MasterUsername: username,
+    MasterUserPassword: password,
+    PubliclyAccessible: true,
+    Tags: [{ Key: "BravoCloud-User", Value: userId }]
+  }));
 
   // AWS RDS endpoint follows this pattern
   const mockEndpoint = `${dbIdentifier}.xxxxxx.${region}.rds.amazonaws.com`;
@@ -561,18 +557,14 @@ export async function provisionRedisCache(projectName: string, userId: string): 
   const cacheClient = new ElastiCacheClient({ region });
   const clusterId = `bravocloud-redis-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 10)}-${Math.random().toString(36).substring(2, 6)}`;
   
-  try {
-    // Attempt real provisioning
-    await cacheClient.send(new CreateCacheClusterCommand({
-      CacheClusterId: clusterId,
-      Engine: "redis",
-      CacheNodeType: "cache.t3.micro",
-      NumCacheNodes: 1,
-      Tags: [{ Key: "BravoCloud-User", Value: userId }]
-    }));
-  } catch (e: any) {
-    console.warn("ElastiCache Provisioning failed, falling back to mock:", e.message);
-  }
+  // Real provisioning
+  await cacheClient.send(new CreateCacheClusterCommand({
+    CacheClusterId: clusterId,
+    Engine: "redis",
+    CacheNodeType: "cache.t3.micro",
+    NumCacheNodes: 1,
+    Tags: [{ Key: "BravoCloud-User", Value: userId }]
+  }));
 
   // AWS ElastiCache endpoint pattern
   const mockEndpoint = `${clusterId}.xxxxxx.0001.${region}.cache.amazonaws.com`;
