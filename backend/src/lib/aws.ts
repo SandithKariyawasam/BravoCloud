@@ -666,58 +666,62 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
 
   // 3. Iterate over storage resources
   for (const item of storageItems) {
-    if (item.type === 's3') {
-      try {
-        const { S3Client, DeleteBucketCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
-        const s3Client = new S3Client({ region });
-        
-        // Empty the bucket first
-        let hasMore = true;
-        let continuationToken = undefined;
-        while (hasMore) {
-          const listRes: any = await s3Client.send(new ListObjectsV2Command({ Bucket: item.id, ContinuationToken: continuationToken }));
-          if (listRes.Contents && listRes.Contents.length > 0) {
-            await s3Client.send(new DeleteObjectsCommand({
-              Bucket: item.id,
-              Delete: { Objects: listRes.Contents.map((obj: any) => ({ Key: obj.Key })) }
-            }));
-          }
-          hasMore = !!listRes.IsTruncated;
-          continuationToken = listRes.NextContinuationToken;
-        }
+    await deleteStorageResource(item);
+  }
+}
 
-        // Delete the bucket
-        await s3Client.send(new DeleteBucketCommand({ Bucket: item.id }));
-        console.log(`Deleted S3 bucket: ${item.id}`);
-      } catch (e: any) {
-        console.warn(`Failed to delete S3 bucket ${item.id}:`, e.message);
-      }
-    } else if (item.type === 'postgres') {
-      try {
-        const { RDSClient, DeleteDBInstanceCommand } = require("@aws-sdk/client-rds");
-        const rdsClient = new RDSClient({ region });
-        await rdsClient.send(new DeleteDBInstanceCommand({
-          DBInstanceIdentifier: item.id,
-          SkipFinalSnapshot: true
-        }));
-        console.log(`Deleted RDS DB: ${item.id}`);
-      } catch (e: any) {
-        if (e.name !== "DBInstanceNotFoundFault") {
-          console.warn(`Failed to delete RDS DB ${item.id}:`, e.message);
+export async function deleteStorageResource(item: any): Promise<void> {
+  if (item.type === 's3') {
+    try {
+      const { S3Client, DeleteBucketCommand, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+      const s3Client = new S3Client({ region });
+      
+      // Empty the bucket first
+      let hasMore = true;
+      let continuationToken = undefined;
+      while (hasMore) {
+        const listRes: any = await s3Client.send(new ListObjectsV2Command({ Bucket: item.id, ContinuationToken: continuationToken }));
+        if (listRes.Contents && listRes.Contents.length > 0) {
+          await s3Client.send(new DeleteObjectsCommand({
+            Bucket: item.id,
+            Delete: { Objects: listRes.Contents.map((obj: any) => ({ Key: obj.Key })) }
+          }));
         }
+        hasMore = !!listRes.IsTruncated;
+        continuationToken = listRes.NextContinuationToken;
       }
-    } else if (item.type === 'redis') {
-      try {
-        const { ElastiCacheClient, DeleteCacheClusterCommand } = require("@aws-sdk/client-elasticache");
-        const cacheClient = new ElastiCacheClient({ region });
-        await cacheClient.send(new DeleteCacheClusterCommand({
-          CacheClusterId: item.id
-        }));
-        console.log(`Deleted Redis Cluster: ${item.id}`);
-      } catch (e: any) {
-        if (e.name !== "CacheClusterNotFoundFault") {
-          console.warn(`Failed to delete Redis Cluster ${item.id}:`, e.message);
-        }
+
+      // Delete the bucket
+      await s3Client.send(new DeleteBucketCommand({ Bucket: item.id }));
+      console.log(`Deleted S3 bucket: ${item.id}`);
+    } catch (e: any) {
+      console.warn(`Failed to delete S3 bucket ${item.id}:`, e.message);
+    }
+  } else if (item.type === 'postgres') {
+    try {
+      const { RDSClient, DeleteDBInstanceCommand } = require("@aws-sdk/client-rds");
+      const rdsClient = new RDSClient({ region });
+      await rdsClient.send(new DeleteDBInstanceCommand({
+        DBInstanceIdentifier: item.id,
+        SkipFinalSnapshot: true
+      }));
+      console.log(`Deleted RDS DB: ${item.id}`);
+    } catch (e: any) {
+      if (e.name !== "DBInstanceNotFoundFault") {
+        console.warn(`Failed to delete RDS DB ${item.id}:`, e.message);
+      }
+    }
+  } else if (item.type === 'redis') {
+    try {
+      const { ElastiCacheClient, DeleteCacheClusterCommand } = require("@aws-sdk/client-elasticache");
+      const cacheClient = new ElastiCacheClient({ region });
+      await cacheClient.send(new DeleteCacheClusterCommand({
+        CacheClusterId: item.id
+      }));
+      console.log(`Deleted Redis Cluster: ${item.id}`);
+    } catch (e: any) {
+      if (e.name !== "CacheClusterNotFoundFault") {
+        console.warn(`Failed to delete Redis Cluster ${item.id}:`, e.message);
       }
     }
   }

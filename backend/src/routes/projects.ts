@@ -288,6 +288,41 @@ router.get('/:id', verifyToken, async (req: any, res: any) => {
     const { getEcsTaskPublicIp } = require('../lib/aws');
     const taskIp = await getEcsTaskPublicIp(project.name);
 
+    if (project.storage && project.storage.length > 0) {
+      let updatedStorage = false;
+      const { RDSClient, DescribeDBInstancesCommand } = require("@aws-sdk/client-rds");
+      const { ElastiCacheClient, DescribeCacheClustersCommand } = require("@aws-sdk/client-elasticache");
+      const region = process.env.AWS_REGION || 'us-east-1';
+
+      for (const item of project.storage) {
+        if (item.status === 'Provisioning') {
+          try {
+            if (item.type === 'postgres') {
+              const rdsClient = new RDSClient({ region });
+              const res = await rdsClient.send(new DescribeDBInstancesCommand({ DBInstanceIdentifier: item.id }));
+              if (res.DBInstances && res.DBInstances.length > 0 && res.DBInstances[0].DBInstanceStatus === 'available') {
+                item.status = 'Active';
+                updatedStorage = true;
+              }
+            } else if (item.type === 'redis') {
+              const cacheClient = new ElastiCacheClient({ region });
+              const res = await cacheClient.send(new DescribeCacheClustersCommand({ CacheClusterId: item.id }));
+              if (res.CacheClusters && res.CacheClusters.length > 0 && res.CacheClusters[0].CacheClusterStatus === 'available') {
+                item.status = 'Active';
+                updatedStorage = true;
+              }
+            }
+          } catch (e: any) {
+            console.error(`Failed to check AWS status for ${item.id}:`, e.message);
+          }
+        }
+      }
+
+      if (updatedStorage) {
+        await db.collection('projects').doc(projectId).update({ storage: project.storage });
+      }
+    }
+
     let latestCommitMessage = 'Deployed via BravoCloud';
     try {
       if (project.repoUrl && req.user.githubToken) {
@@ -861,6 +896,13 @@ router.delete('/:id/storage/:storageId', verifyToken, async (req: any, res: any)
     if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
 
     const currentStorage = projectData.storage || [];
+    const itemToDelete = currentStorage.find((s: any) => s.id === storageId);
+    
+    if (itemToDelete) {
+      const { deleteStorageResource } = require('../lib/aws');
+      await deleteStorageResource(itemToDelete);
+    }
+
     const updatedStorage = currentStorage.filter((s: any) => s.id !== storageId);
 
     await projectRef.update({ storage: updatedStorage });
