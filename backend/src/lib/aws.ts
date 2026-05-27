@@ -664,6 +664,67 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
     }
   }
 
+  // 2.5 Delete ALB Rules and Target Group
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32);
+
+  try {
+    const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, DescribeRulesCommand, DeleteRuleCommand, DescribeTargetGroupsCommand, DeleteTargetGroupCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+    const elbClient = new ElasticLoadBalancingV2Client({ region });
+
+    const albRes = await elbClient.send(new DescribeLoadBalancersCommand({ Names: ["bravocloud-alb"] }));
+    const albArn = albRes.LoadBalancers?.[0]?.LoadBalancerArn;
+    if (albArn) {
+      const listRes = await elbClient.send(new DescribeListenersCommand({ LoadBalancerArn: albArn }));
+      
+      const httpsListenerArn = listRes.Listeners?.find((l: any) => l.Port === 443)?.ListenerArn;
+      const httpListenerArn = listRes.Listeners?.find((l: any) => l.Port === 80)?.ListenerArn;
+
+      for (const listenerArn of [httpsListenerArn, httpListenerArn]) {
+        if (!listenerArn) continue;
+        const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: listenerArn }));
+        for (const rule of rulesRes.Rules || []) {
+          const isMatch = rule.Conditions?.some((c: any) => 
+            c.Field === "host-header" && 
+            c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`)
+          );
+          if (isMatch) {
+            await elbClient.send(new DeleteRuleCommand({ RuleArn: rule.RuleArn }));
+            console.log(`Deleted ALB rule: ${rule.RuleArn}`);
+          }
+        }
+      }
+    }
+
+    try {
+      const tgRes = await elbClient.send(new DescribeTargetGroupsCommand({ Names: [tgName] }));
+      const tgArn = tgRes.TargetGroups?.[0]?.TargetGroupArn;
+      if (tgArn) {
+        await elbClient.send(new DeleteTargetGroupCommand({ TargetGroupArn: tgArn }));
+        console.log(`Deleted Target Group: ${tgName}`);
+      }
+    } catch (e: any) {
+      if (e.name !== "TargetGroupNotFoundException") {
+        console.warn(`Failed to delete Target Group ${tgName}:`, e.message);
+      }
+    }
+  } catch (e: any) {
+    console.warn(`Failed to delete ALB Rules/Target Group for ${sanitizedName}:`, e.message);
+  }
+
+  // 2.6 Delete CloudWatch Log Group
+  try {
+    const { CloudWatchLogsClient, DeleteLogGroupCommand } = require("@aws-sdk/client-cloudwatch-logs");
+    const cwClient = new CloudWatchLogsClient({ region });
+    const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+    await cwClient.send(new DeleteLogGroupCommand({ logGroupName }));
+    console.log(`Deleted Log Group: ${logGroupName}`);
+  } catch (e: any) {
+    if (e.name !== "ResourceNotFoundException") {
+      console.warn(`Failed to delete Log Group for ${sanitizedName}:`, e.message);
+    }
+  }
+
   // 3. Iterate over storage resources
   for (const item of storageItems) {
     await deleteStorageResource(item);
