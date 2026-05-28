@@ -46,7 +46,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isStoragePage = pathname?.endsWith('/storage');
   const isWorkflowsPage = pathname?.endsWith('/workflows');
   const isUsagePage = pathname?.endsWith('/usage');
-  const isSettingsPage = pathname?.endsWith('/settings');
+  const isSettingsPage = pathname?.includes('/settings');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">(isSettingsPage ? "settings" : "main");
   const [isMounted, setIsMounted] = useState(false);
@@ -91,7 +91,11 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     } else if (isSettingsPage) {
       setActiveItem("Settings");
       setView("settings");
-      setActiveSettingsItem("General");
+      if (pathname.endsWith('/git')) {
+        setActiveSettingsItem("Git");
+      } else {
+        setActiveSettingsItem("General");
+      }
     } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSettingsPage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
@@ -310,7 +314,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
             )}
 
             {(isProjectView ? [
-              "General", "Domains", "Environment Variables", "Git",
+              "General", "Git",
               "Security", "Serverless Functions", "Cron Jobs", "Edge Network", "Advanced"
             ] : [
               "General", "Billing", "Build and Deployment", "Invoices", "Members",
@@ -324,8 +328,9 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                 active={!q && view === "settings" && activeSettingsItem === item}
                 onClick={() => {
                   handleSelect("settings", setActiveSettingsItem, item);
-                  if (isProjectView && item === "General") {
-                    router.push(`/dashboard/project/${projectId}/settings`);
+                  if (isProjectView) {
+                    if (item === "General") router.push(`/dashboard/project/${projectId}/settings`);
+                    if (item === "Git") router.push(`/dashboard/project/${projectId}/settings/git`);
                   }
                 }}
                 q={q}

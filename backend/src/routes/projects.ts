@@ -955,7 +955,7 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
 
     // Filter allowed fields
-    const allowedFields = ['name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir'];
+    const allowedFields = ['name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch'];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
@@ -971,6 +971,41 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     res.json({ success: true, project: updatedDoc.data() });
   } catch (error: any) {
     console.error('Error updating project:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Get repository branches
+router.get('/:id/branches', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    if (!projectData.repoUrl) return res.json({ branches: [] });
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    const user = userDoc.data() as any;
+    if (!user?.githubToken) return res.status(400).json({ error: 'GitHub token not found' });
+
+    const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+    const owner = urlParts[0];
+    const repo = urlParts[1];
+
+    const { Octokit } = require('@octokit/rest');
+    const octokit = new Octokit({ auth: user.githubToken });
+
+    const branchesRes = await octokit.rest.repos.listBranches({ owner, repo, per_page: 100 });
+    const branches = branchesRes.data.map((b: any) => b.name);
+
+    res.json({ branches });
+  } catch (error: any) {
+    console.error('Error fetching branches:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
