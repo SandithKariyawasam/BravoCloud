@@ -1010,6 +1010,58 @@ router.get('/:id/branches', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// Get repository directories
+router.get('/:id/directories', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+    const pathQuery = req.query.path || '';
+
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    if (!projectData.repoUrl) return res.json({ directories: [] });
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    const user = userDoc.data() as any;
+    if (!user?.githubToken) return res.status(400).json({ error: 'GitHub token not found' });
+
+    const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+    const owner = urlParts[0];
+    const repo = urlParts[1];
+
+    const { Octokit } = require('@octokit/rest');
+    const octokit = new Octokit({ auth: user.githubToken });
+
+    // Remove leading './' or '/' for GitHub API
+    const cleanPath = pathQuery.replace(/^\.?\//, '');
+    
+    const contentRes = await octokit.rest.repos.getContent({ 
+      owner, 
+      repo, 
+      path: cleanPath,
+      ref: projectData.branch || 'main'
+    });
+    
+    let directories = [];
+    if (Array.isArray(contentRes.data)) {
+      directories = contentRes.data.filter((item: any) => item.type === 'dir').map((item: any) => item.name);
+    }
+    
+    res.json({ directories });
+  } catch (error: any) {
+    // If path is not found (e.g., deleted), return empty
+    if (error.status === 404) {
+      return res.json({ directories: [] });
+    }
+    console.error('Error fetching directories:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 // Delete project
 router.delete('/:id', verifyToken, async (req: any, res: any) => {
   try {

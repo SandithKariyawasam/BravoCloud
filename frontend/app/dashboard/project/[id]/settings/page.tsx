@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, Save, AlertTriangle, Trash2, Loader2, Info } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Loader2, Info, Folder, ChevronDown, Check, ChevronLeft } from "lucide-react";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
 
@@ -22,6 +22,12 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
   const [outputDirectory, setOutputDirectory] = useState("");
   const [installCommand, setInstallCommand] = useState("");
   const [rootDir, setRootDir] = useState("./");
+
+  // Root Directory Browser State
+  const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+  const [browsePath, setBrowsePath] = useState("./");
+  const [directories, setDirectories] = useState<string[]>([]);
+  const [loadingDirs, setLoadingDirs] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -96,6 +102,58 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
     } finally {
       setSaving(false);
     }
+  };
+
+  const fetchDirectories = async (path: string) => {
+    setLoadingDirs(true);
+    setDirectories([]);
+    const token = localStorage.getItem("bravocloud_token");
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    try {
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/directories?path=${encodeURIComponent(path)}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDirectories(data.directories || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingDirs(false);
+    }
+  };
+
+  const handleOpenBrowser = () => {
+    if (!project?.repoUrl) {
+      alert("Please connect a GitHub repository in Git Settings first to browse directories.");
+      return;
+    }
+    setIsBrowserOpen(!isBrowserOpen);
+    if (!isBrowserOpen) {
+      setBrowsePath("./");
+      fetchDirectories("./");
+    }
+  };
+
+  const navigateToDir = (dirName: string) => {
+    const newPath = browsePath === "./" ? `./${dirName}` : `${browsePath}/${dirName}`;
+    setBrowsePath(newPath);
+    fetchDirectories(newPath);
+  };
+
+  const navigateUp = () => {
+    if (browsePath === "./") return;
+    const parts = browsePath.split("/");
+    parts.pop();
+    const newPath = parts.length === 1 ? "./" : parts.join("/");
+    setBrowsePath(newPath);
+    fetchDirectories(newPath);
+  };
+
+  const selectDirectory = (path: string) => {
+    setRootDir(path);
+    setIsBrowserOpen(false);
   };
 
   const handleDelete = async () => {
@@ -212,15 +270,67 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
                   </select>
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-[#e4e4e7] mb-2">Root Directory</label>
-                  <input
-                    type="text"
-                    value={rootDir}
-                    onChange={(e) => setRootDir(e.target.value)}
-                    placeholder="./"
-                    className="w-full bg-[#18181b] border border-[#3f3f46] text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 font-mono text-sm"
-                  />
+                  
+                  <div 
+                    onClick={handleOpenBrowser}
+                    className="w-full bg-[#18181b] border border-[#3f3f46] hover:border-[#52525b] text-white px-4 py-2 rounded-lg cursor-pointer flex items-center justify-between transition-colors font-mono text-sm"
+                  >
+                    <span>{rootDir}</span>
+                    <ChevronDown size={16} className={`text-[#71717a] transition-transform ${isBrowserOpen ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {isBrowserOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-[#09090b] border border-[#27272a] rounded-lg shadow-2xl z-20 overflow-hidden">
+                      <div className="bg-[#121214] border-b border-[#27272a] p-3 flex items-center justify-between text-sm font-mono text-[#a1a1aa]">
+                        <div className="flex items-center gap-2">
+                          {browsePath !== "./" && (
+                            <button onClick={navigateUp} className="hover:text-white transition-colors p-1 bg-[#18181b] rounded">
+                              <ChevronLeft size={14} />
+                            </button>
+                          )}
+                          <span>Browsing: {browsePath}</span>
+                        </div>
+                        <button onClick={() => selectDirectory(browsePath)} className="text-white hover:underline text-xs">
+                          Select current
+                        </button>
+                      </div>
+
+                      <div className="max-h-60 overflow-y-auto p-2">
+                        {loadingDirs ? (
+                          <div className="flex items-center justify-center p-6 text-[#71717a]">
+                            <Loader2 size={16} className="animate-spin mr-2" /> Loading...
+                          </div>
+                        ) : directories.length === 0 ? (
+                          <div className="text-center p-6 text-[#71717a] text-sm italic">
+                            No folders found here.
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {directories.map((dir) => (
+                              <div key={dir} className="flex items-center justify-between group hover:bg-[#18181b] p-2 rounded-lg transition-colors">
+                                <div 
+                                  className="flex items-center gap-3 cursor-pointer flex-1"
+                                  onClick={() => navigateToDir(dir)}
+                                >
+                                  <Folder size={16} className="text-[#a1a1aa] group-hover:text-white transition-colors" />
+                                  <span className="font-mono text-sm text-[#e4e4e7] group-hover:text-white transition-colors">{dir}</span>
+                                </div>
+                                <button 
+                                  onClick={() => selectDirectory(browsePath === "./" ? `./${dir}` : `${browsePath}/${dir}`)}
+                                  className="opacity-0 group-hover:opacity-100 bg-white text-black text-xs px-3 py-1.5 rounded font-medium transition-all"
+                                >
+                                  Select
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-xs text-[#71717a] mt-2">The directory within your repository where your code is located.</p>
                 </div>
 
