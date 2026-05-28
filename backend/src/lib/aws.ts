@@ -729,6 +729,36 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
   for (const item of storageItems) {
     await deleteStorageResource(item);
   }
+
+  // 4. Delete Cognito App Client and User
+  try {
+    const { CognitoIdentityProviderClient, ListUserPoolsCommand, ListUserPoolClientsCommand, DeleteUserPoolClientCommand, AdminDeleteUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
+    const cognitoClient = new CognitoIdentityProviderClient({ region });
+    const poolName = "bravocloud-auth-pool";
+    
+    const listRes = await cognitoClient.send(new ListUserPoolsCommand({ MaxResults: 50 }));
+    const pool = listRes.UserPools?.find((p: any) => p.Name === poolName);
+    
+    if (pool) {
+      const clientName = `client-${sanitizedName}`;
+      const listClients = await cognitoClient.send(new ListUserPoolClientsCommand({ UserPoolId: pool.Id, MaxResults: 50 }));
+      const appClient = listClients.UserPoolClients?.find((c: any) => c.ClientName === clientName);
+      
+      if (appClient) {
+        await cognitoClient.send(new DeleteUserPoolClientCommand({ UserPoolId: pool.Id, ClientId: appClient.ClientId }));
+        console.log(`Deleted Cognito App Client for ${projectName}`);
+      }
+
+      try {
+        await cognitoClient.send(new AdminDeleteUserCommand({ UserPoolId: pool.Id, Username: `admin-${sanitizedName}` }));
+        console.log(`Deleted Cognito User for ${projectName}`);
+      } catch (e: any) {
+        if (e.name !== 'UserNotFoundException') console.error("Error deleting Cognito user:", e.message);
+      }
+    }
+  } catch (error: any) {
+    console.error("Error cleaning up Cognito resources:", error.message);
+  }
 }
 
 export async function deleteStorageResource(item: any): Promise<void> {
@@ -785,6 +815,193 @@ export async function deleteStorageResource(item: any): Promise<void> {
         console.warn(`Failed to delete Redis Cluster ${item.id}:`, e.message);
       }
     }
+  }
+}
+
+export async function updateProjectWAF(projectName: string, mode: string, ips: string[]): Promise<void> {
+  // WAF logic placeholder. In a production scenario with a shared ALB, we would 
+  // 1. Create an IPSet for the project.
+  // 2. Add a rule to the ALB's central WebACL linking the HostHeader to this IPSet.
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const ipSetName = `bravocloud-ipset-${sanitizedName}`.substring(0, 128); // WAF limits
+
+  // Format IPs to CIDR
+  const formattedIps = ips.map(ip => ip.includes('/') ? ip : `${ip}/32`);
+
+  try {
+    const { WAFV2Client, CreateIPSetCommand, GetIPSetCommand, UpdateIPSetCommand, ListIPSetsCommand } = require("@aws-sdk/client-wafv2");
+    // WAFv2 for ALB is regional
+    const wafClient = new WAFV2Client({ region });
+
+    const listRes = await wafClient.send(new ListIPSetsCommand({ Scope: "REGIONAL" }));
+    const existingSet = listRes.IPSets?.find((set: any) => set.Name === ipSetName);
+
+    if (existingSet) {
+      // Need LockToken to update
+      const getRes = await wafClient.send(new GetIPSetCommand({ Name: ipSetName, Scope: "REGIONAL", Id: existingSet.Id }));
+      await wafClient.send(new UpdateIPSetCommand({
+        Name: ipSetName,
+        Scope: "REGIONAL",
+        Id: existingSet.Id,
+        Description: `IP Set for ${projectName}`,
+        Addresses: formattedIps,
+        LockToken: getRes.LockToken
+      }));
+      console.log(`Updated WAF IPSet ${ipSetName} with ${formattedIps.length} IPs`);
+    } else {
+      // Create new
+      await wafClient.send(new CreateIPSetCommand({
+        Name: ipSetName,
+        Scope: "REGIONAL",
+        Description: `IP Set for ${projectName}`,
+        IPAddressVersion: "IPV4",
+        Addresses: formattedIps
+      }));
+      console.log(`Created new WAF IPSet ${ipSetName}`);
+    }
+  } catch (error: any) {
+    console.error(`Failed to sync WAF IPSet for ${projectName}:`, error.message);
+    throw error;
+  }
+}
+
+export async function setupCognitoUserPool(): Promise<{ poolId: string, domain: string }> {
+  const { CognitoIdentityProviderClient, ListUserPoolsCommand, CreateUserPoolCommand, CreateUserPoolDomainCommand } = require("@aws-sdk/client-cognito-identity-provider");
+  const client = new CognitoIdentityProviderClient({ region });
+  const poolName = "bravocloud-auth-pool";
+  const domainPrefix = `bravocloud-auth-${process.env.AWS_ACCOUNT_ID || 'demo'}`;
+
+  const listRes = await client.send(new ListUserPoolsCommand({ MaxResults: 50 }));
+  let pool = listRes.UserPools?.find((p: any) => p.Name === poolName);
+
+  if (!pool) {
+    const createRes = await client.send(new CreateUserPoolCommand({
+      PoolName: poolName,
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: true }
+    }));
+    pool = createRes.UserPool;
+    
+    try {
+      await client.send(new CreateUserPoolDomainCommand({
+        UserPoolId: pool.Id,
+        Domain: domainPrefix
+      }));
+    } catch (e: any) {
+      console.log("Cognito Domain might already exist or failed:", e.message);
+    }
+  }
+
+  return { poolId: pool.Id, domain: domainPrefix };
+}
+
+export async function syncProjectCognitoAuth(projectName: string, password: string): Promise<{ clientId: string }> {
+  const { CognitoIdentityProviderClient, CreateUserPoolClientCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand, ListUserPoolClientsCommand } = require("@aws-sdk/client-cognito-identity-provider");
+  const client = new CognitoIdentityProviderClient({ region });
+  const { poolId } = await setupCognitoUserPool();
+  
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const clientName = `client-${sanitizedName}`;
+
+  const listClients = await client.send(new ListUserPoolClientsCommand({ UserPoolId: poolId, MaxResults: 50 }));
+  let appClient = listClients.UserPoolClients?.find((c: any) => c.ClientName === clientName);
+
+  if (!appClient) {
+    const createClientRes = await client.send(new CreateUserPoolClientCommand({
+      UserPoolId: poolId,
+      ClientName: clientName,
+      GenerateSecret: true,
+      AllowedOAuthFlows: ["code"],
+      AllowedOAuthFlowsUserPoolClient: true,
+      AllowedOAuthScopes: ["openid", "email", "profile"],
+      CallbackURLs: [`https://${sanitizedName}.bravocloud.tech/oauth2/idpresponse`],
+      SupportedIdentityProviders: ["COGNITO"]
+    }));
+    appClient = createClientRes.UserPoolClient;
+  }
+
+  // Create or Update User
+  const username = `admin-${sanitizedName}`;
+  try {
+    await client.send(new AdminCreateUserCommand({
+      UserPoolId: poolId,
+      Username: username,
+      MessageAction: "SUPPRESS", // Don't send email
+    }));
+  } catch (e: any) {
+    if (e.name !== 'UsernameExistsException') throw e;
+  }
+
+  await client.send(new AdminSetUserPasswordCommand({
+    UserPoolId: poolId,
+    Username: username,
+    Password: password,
+    Permanent: true
+  }));
+
+  return { clientId: appClient.ClientId };
+}
+
+export async function updateProjectALBAuth(projectName: string, passwordProtection: boolean, clientId?: string) {
+  const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, DescribeRulesCommand, ModifyRuleCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+  const elbClient = new ElasticLoadBalancingV2Client({ region });
+  
+  const dlbRes = await elbClient.send(new DescribeLoadBalancersCommand({ Names: ["bravocloud-alb"] }));
+  const albArn = dlbRes.LoadBalancers?.[0]?.LoadBalancerArn;
+  if (!albArn) return;
+
+  const listeners = await elbClient.send(new DescribeListenersCommand({ LoadBalancerArn: albArn }));
+  const httpsListenerArn = listeners.Listeners?.find((l: any) => l.Port === 443)?.ListenerArn;
+  if (!httpsListenerArn) return;
+
+  const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpsListenerArn }));
+  
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const hostHeader = `${sanitizedName}.bravocloud.tech`;
+  
+  const projectRule = rulesRes.Rules?.find((r: any) => r.Conditions?.some((c: any) => c.Field === 'host-header' && c.HostHeaderConfig?.Values?.includes(hostHeader)));
+  if (!projectRule) return;
+
+  const { poolId, domain } = await setupCognitoUserPool();
+  
+  // Find the target group from existing actions
+  const tgAction = projectRule.Actions?.find((a: any) => a.Type === 'forward');
+  const tgArn = tgAction?.TargetGroupArn || tgAction?.ForwardConfig?.TargetGroups?.[0]?.TargetGroupArn;
+  
+  if (passwordProtection && clientId && tgArn) {
+    console.log(`Enabling Cognito Auth for ${hostHeader}`);
+    await elbClient.send(new ModifyRuleCommand({
+      RuleArn: projectRule.RuleArn,
+      Actions: [
+        {
+          Type: "authenticate-cognito",
+          Order: 1,
+          AuthenticateCognitoConfig: {
+            UserPoolArn: `arn:aws:cognito-idp:${region}:${process.env.AWS_ACCOUNT_ID || '654654320491'}:userpool/${poolId}`,
+            UserPoolClientId: clientId,
+            UserPoolDomain: domain,
+            SessionCookieName: "AWSELBAuthSessionCookie",
+            OnUnauthenticatedRequest: "authenticate"
+          }
+        },
+        {
+          Type: "forward",
+          Order: 2,
+          TargetGroupArn: tgArn
+        }
+      ]
+    }));
+  } else if (!passwordProtection && tgArn) {
+    console.log(`Disabling Cognito Auth for ${hostHeader}`);
+    await elbClient.send(new ModifyRuleCommand({
+      RuleArn: projectRule.RuleArn,
+      Actions: [
+        {
+          Type: "forward",
+          Order: 1,
+          TargetGroupArn: tgArn
+        }
+      ]
+    }));
   }
 }
 

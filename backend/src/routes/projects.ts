@@ -955,7 +955,10 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
 
     // Filter allowed fields
-    const allowedFields = ['name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch'];
+    const allowedFields = [
+      'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
+      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList'
+    ];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
@@ -965,6 +968,36 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
 
     if (Object.keys(filteredUpdates).length > 0) {
       await projectRef.update(filteredUpdates);
+      
+      // If WAF settings were updated, trigger the AWS WAF sync
+      if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {
+        const { updateProjectWAF } = require('../lib/aws');
+        const mode = filteredUpdates.ipAccessMode || projectData.ipAccessMode || 'allow_all';
+        const ips = filteredUpdates.ipList || projectData.ipList || [];
+        // Run asynchronously
+        updateProjectWAF(projectData.name, mode, ips).catch((e: any) => console.error("WAF update failed:", e));
+      }
+
+      // If Password Protection settings were updated, trigger Cognito/ALB Auth sync
+      if (filteredUpdates.passwordProtection !== undefined || filteredUpdates.accessPassword !== undefined) {
+        const { syncProjectCognitoAuth, updateProjectALBAuth } = require('../lib/aws');
+        const isEnabled = filteredUpdates.passwordProtection ?? projectData.passwordProtection ?? false;
+        const password = filteredUpdates.accessPassword ?? projectData.accessPassword ?? '';
+        
+        // Run asynchronously
+        (async () => {
+          try {
+            let clientId;
+            if (isEnabled && password) {
+              const res = await syncProjectCognitoAuth(projectData.name, password);
+              clientId = res.clientId;
+            }
+            await updateProjectALBAuth(projectData.name, isEnabled && !!password, clientId);
+          } catch (e: any) {
+            console.error("Cognito/ALB Auth sync failed:", e.message);
+          }
+        })();
+      }
     }
 
     const updatedDoc = await projectRef.get();

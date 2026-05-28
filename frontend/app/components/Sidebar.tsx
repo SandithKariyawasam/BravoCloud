@@ -93,6 +93,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setView("settings");
       if (pathname.endsWith('/git')) {
         setActiveSettingsItem("Git");
+      } else if (pathname.endsWith('/security')) {
+        setActiveSettingsItem("Security");
       } else {
         setActiveSettingsItem("General");
       }
@@ -331,6 +333,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                   if (isProjectView) {
                     if (item === "General") router.push(`/dashboard/project/${projectId}/settings`);
                     if (item === "Git") router.push(`/dashboard/project/${projectId}/settings/git`);
+                    if (item === "Security") router.push(`/dashboard/project/${projectId}/settings/security`);
                   }
                 }}
                 q={q}
