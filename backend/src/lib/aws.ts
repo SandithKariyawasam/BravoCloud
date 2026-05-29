@@ -1005,3 +1005,96 @@ export async function updateProjectALBAuth(projectName: string, passwordProtecti
   }
 }
 
+export async function syncServerlessFunctions(projectName: string, functions: any[]) {
+  if (!functions || functions.length === 0) return;
+  
+  const { LambdaClient, CreateFunctionCommand, GetFunctionCommand, UpdateFunctionConfigurationCommand } = require("@aws-sdk/client-lambda");
+  const { ApiGatewayV2Client, CreateApiCommand, CreateIntegrationCommand, CreateRouteCommand, GetApisCommand } = require("@aws-sdk/client-apigatewayv2");
+  
+  const lambdaClient = new LambdaClient({ region });
+  const apiGwClient = new ApiGatewayV2Client({ region });
+  
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  
+  // 1. Create API Gateway if it doesn't exist
+  let apiId: string;
+  const apis = await apiGwClient.send(new GetApisCommand({ MaxResults: "50" }));
+  const existingApi = apis.Items?.find((api: any) => api.Name === `bravocloud-api-${sanitizedName}`);
+  
+  if (existingApi) {
+    apiId = existingApi.ApiId;
+  } else {
+    console.log(`Provisioning API Gateway for ${projectName}`);
+    const apiRes = await apiGwClient.send(new CreateApiCommand({
+      Name: `bravocloud-api-${sanitizedName}`,
+      ProtocolType: "HTTP",
+      CorsConfiguration: { AllowOrigins: ["*"], AllowMethods: ["*"] }
+    }));
+    apiId = apiRes.ApiId;
+  }
+
+  // Very basic minimal zip for Node.js lambda (buffer of a zip file containing index.js)
+  // This is a pre-compiled base64 zip containing: exports.handler = async () => "Placeholder";
+  const dummyZipBuffer = Buffer.from("UEsDBAoAAAAAALyPqlgAAAAAAAAAAAAAAAAIAAAAaW5kZXguanNleHBvcnRzLmhhbmRsZXIgPSBhc3luYyAodmFsdWUpID0+ICgiUGxhY2Vob2xkZXIiKTsKUEsBAhQACgAAAAAAvI+qWAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAP8BAAAAAGluZGV4LmpzUEsFBgAAAAABAAEANgAAAD0AAAAAAA==", "base64");
+  const executionRole = process.env.LAMBDA_EXECUTION_ROLE || `arn:aws:iam::${process.env.AWS_ACCOUNT_ID || '654654320491'}:role/ecsTaskExecutionRole`;
+
+  for (const func of functions) {
+    const lambdaName = `bc-${sanitizedName}-${func.name}`;
+    let lambdaArn: string;
+
+    try {
+      const getRes = await lambdaClient.send(new GetFunctionCommand({ FunctionName: lambdaName }));
+      lambdaArn = getRes.Configuration.FunctionArn;
+      console.log(`Lambda ${lambdaName} exists, updating config...`);
+      await lambdaClient.send(new UpdateFunctionConfigurationCommand({
+        FunctionName: lambdaName,
+        MemorySize: func.memory || 128,
+        Timeout: func.timeout || 10
+      }));
+    } catch (e: any) {
+      if (e.name === "ResourceNotFoundException") {
+        console.log(`Provisioning new Lambda: ${lambdaName}`);
+        try {
+          const createRes = await lambdaClient.send(new CreateFunctionCommand({
+            FunctionName: lambdaName,
+            Runtime: func.runtime || "nodejs20.x",
+            Role: executionRole,
+            Handler: "index.handler", // Real handler set during actual build
+            MemorySize: func.memory || 128,
+            Timeout: func.timeout || 10,
+            Code: { ZipFile: dummyZipBuffer }
+          }));
+          lambdaArn = createRes.FunctionArn;
+        } catch (createErr: any) {
+          console.error(`Failed to create Lambda ${lambdaName}:`, createErr.message);
+          continue;
+        }
+      } else {
+        console.error(`Error fetching Lambda ${lambdaName}:`, e.message);
+        continue;
+      }
+    }
+
+    // Provision API Gateway Route Integration
+    try {
+      const integrationRes = await apiGwClient.send(new CreateIntegrationCommand({
+        ApiId: apiId,
+        IntegrationType: "AWS_PROXY",
+        IntegrationUri: lambdaArn,
+        PayloadFormatVersion: "2.0"
+      }));
+
+      await apiGwClient.send(new CreateRouteCommand({
+        ApiId: apiId,
+        RouteKey: `ANY /api/${func.name}`,
+        Target: `integrations/${integrationRes.IntegrationId}`
+      }));
+      console.log(`Created HTTP API Route: /api/${func.name}`);
+    } catch (routeErr: any) {
+      if (!routeErr.message.includes("ConflictException")) {
+        console.error(`Error creating route for ${func.name}:`, routeErr.message);
+      }
+    }
+  }
+}
+

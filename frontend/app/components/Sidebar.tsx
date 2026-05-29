@@ -95,6 +95,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
         setActiveSettingsItem("Git");
       } else if (pathname.endsWith('/security')) {
         setActiveSettingsItem("Security");
+      } else if (pathname.endsWith('/serverless')) {
+        setActiveSettingsItem("Serverless Functions");
       } else {
         setActiveSettingsItem("General");
       }
@@ -334,6 +336,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                     if (item === "General") router.push(`/dashboard/project/${projectId}/settings`);
                     if (item === "Git") router.push(`/dashboard/project/${projectId}/settings/git`);
                     if (item === "Security") router.push(`/dashboard/project/${projectId}/settings/security`);
+                    if (item === "Serverless Functions") router.push(`/dashboard/project/${projectId}/settings/serverless`);
                   }
                 }}
                 q={q}

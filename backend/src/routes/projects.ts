@@ -957,7 +957,7 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     // Filter allowed fields
     const allowedFields = [
       'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
-      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList'
+      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions'
     ];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
@@ -997,6 +997,12 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
             console.error("Cognito/ALB Auth sync failed:", e.message);
           }
         })();
+      }
+
+      // If Serverless Functions were updated, trigger sync
+      if (filteredUpdates.serverlessFunctions !== undefined) {
+        const { syncServerlessFunctions } = require('../lib/aws');
+        syncServerlessFunctions(projectData.name, filteredUpdates.serverlessFunctions).catch((e: any) => console.error("Serverless sync failed:", e));
       }
     }
 
@@ -1091,6 +1097,74 @@ router.get('/:id/directories', verifyToken, async (req: any, res: any) => {
       return res.json({ directories: [] });
     }
     console.error('Error fetching directories:', error);
+    res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
+// Auto-detect serverless functions
+router.get('/:id/detect-functions', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const userId = req.user.id;
+
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    if (!projectData.repoUrl) return res.json({ functions: [] });
+
+    const userDoc = await db.collection('users').doc(userId).get();
+    const user = userDoc.data() as any;
+    if (!user?.githubToken) return res.status(400).json({ error: 'GitHub token not found' });
+
+    const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+    const owner = urlParts[0];
+    const repo = urlParts[1];
+
+    const { Octokit } = require('@octokit/rest');
+    const octokit = new Octokit({ auth: user.githubToken });
+
+    // Look for functions in `api` or `src/api` directory
+    let rootDir = projectData.rootDir || './';
+    let apiPath = rootDir === './' ? 'api' : `${rootDir.replace(/^\.\//, '')}/api`;
+
+    let contentRes;
+    try {
+      contentRes = await octokit.rest.repos.getContent({ 
+        owner, 
+        repo, 
+        path: apiPath,
+        ref: projectData.branch || 'main'
+      });
+    } catch (e: any) {
+      if (e.status === 404) {
+        return res.json({ functions: [] });
+      }
+      throw e;
+    }
+
+    const functions = [];
+    if (Array.isArray(contentRes.data)) {
+      for (const item of contentRes.data) {
+        if (item.type === 'file' && (item.name.endsWith('.js') || item.name.endsWith('.ts'))) {
+          const name = item.name.replace(/\.(js|ts)$/, '');
+          functions.push({
+            id: `func_${Math.random().toString(36).substr(2, 9)}`,
+            name: name,
+            handler: `${apiPath}/${item.name}`,
+            runtime: 'nodejs20.x',
+            memory: 128,
+            timeout: 10
+          });
+        }
+      }
+    }
+    
+    res.json({ functions });
+  } catch (error: any) {
+    console.error('Error detecting functions:', error);
     res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
