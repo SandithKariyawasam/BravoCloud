@@ -97,6 +97,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
         setActiveSettingsItem("Security");
       } else if (pathname.endsWith('/serverless')) {
         setActiveSettingsItem("Serverless Functions");
+      } else if (pathname.endsWith('/cron')) {
+        setActiveSettingsItem("Cron Jobs");
       } else {
         setActiveSettingsItem("General");
       }
@@ -337,6 +339,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                     if (item === "Git") router.push(`/dashboard/project/${projectId}/settings/git`);
                     if (item === "Security") router.push(`/dashboard/project/${projectId}/settings/security`);
                     if (item === "Serverless Functions") router.push(`/dashboard/project/${projectId}/settings/serverless`);
+                    if (item === "Cron Jobs") router.push(`/dashboard/project/${projectId}/settings/cron`);
                   }
                 }}
                 q={q}

@@ -1098,3 +1098,69 @@ export async function syncServerlessFunctions(projectName: string, functions: an
   }
 }
 
+export async function syncCronJobs(projectName: string, jobs: any[]) {
+  const { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand, ListSchedulesCommand } = require("@aws-sdk/client-scheduler");
+  const scheduler = new SchedulerClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const groupName = "default"; // AWS Scheduler requires a group, default is usually 'default'
+
+  // We need an IAM Role that allows EventBridge Scheduler to invoke the API destination
+  // For demo purposes we can assume an existing execution role
+  const executionRoleArn = process.env.SCHEDULER_EXECUTION_ROLE || `arn:aws:iam::${process.env.AWS_ACCOUNT_ID || '654654320491'}:role/ecsTaskExecutionRole`;
+
+  // Fetch existing schedules for this project (using a prefix convention)
+  const prefix = `bc-${sanitizedName}-`;
+  let existingSchedules: any[] = [];
+  try {
+    const listRes = await scheduler.send(new ListSchedulesCommand({ NamePrefix: prefix, MaxResults: 100 }));
+    existingSchedules = listRes.Schedules || [];
+  } catch (e: any) {
+    console.error("Failed to list schedules:", e.message);
+  }
+
+  const activeJobNames = new Set(jobs.map(j => `${prefix}${j.id}`));
+
+  // Delete schedules that are no longer in the jobs array
+  for (const existing of existingSchedules) {
+    if (!activeJobNames.has(existing.Name)) {
+      try {
+        console.log(`Deleting removed schedule: ${existing.Name}`);
+        await scheduler.send(new DeleteScheduleCommand({ Name: existing.Name }));
+      } catch (e) {}
+    }
+  }
+
+  // Create or update schedules
+  for (const job of jobs) {
+    const scheduleName = `${prefix}${job.id}`;
+    const targetUrl = `https://${sanitizedName}.bravocloud.tech${job.path.startsWith('/') ? job.path : '/' + job.path}`;
+    
+    const params = {
+      Name: scheduleName,
+      ScheduleExpression: job.schedule,
+      FlexibleTimeWindow: { Mode: "OFF" },
+      Target: {
+        Arn: "arn:aws:scheduler:::aws-sdk:http:invoke", // Note: A real API Destination ARN might be needed depending on AWS setup, but HTTP invoke is simpler if supported
+        RoleArn: executionRoleArn,
+        HttpParameters: {
+          Uri: targetUrl,
+          HttpMethod: "POST"
+        }
+      }
+    };
+
+    try {
+      const existing = existingSchedules.find(s => s.Name === scheduleName);
+      if (existing) {
+        console.log(`Updating existing schedule: ${scheduleName}`);
+        await scheduler.send(new UpdateScheduleCommand(params));
+      } else {
+        console.log(`Creating new schedule: ${scheduleName} to hit ${targetUrl}`);
+        await scheduler.send(new CreateScheduleCommand(params));
+      }
+    } catch (e: any) {
+      console.error(`Failed to provision schedule ${scheduleName}:`, e.message);
+    }
+  }
+}
+

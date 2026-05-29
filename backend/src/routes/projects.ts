@@ -957,7 +957,7 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     // Filter allowed fields
     const allowedFields = [
       'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
-      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions'
+      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs'
     ];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
@@ -1003,6 +1003,12 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
       if (filteredUpdates.serverlessFunctions !== undefined) {
         const { syncServerlessFunctions } = require('../lib/aws');
         syncServerlessFunctions(projectData.name, filteredUpdates.serverlessFunctions).catch((e: any) => console.error("Serverless sync failed:", e));
+      }
+
+      // If Cron Jobs were updated, trigger sync
+      if (filteredUpdates.cronJobs !== undefined) {
+        const { syncCronJobs } = require('../lib/aws');
+        syncCronJobs(projectData.name, filteredUpdates.cronJobs).catch((e: any) => console.error("Cron Jobs sync failed:", e));
       }
     }
 
