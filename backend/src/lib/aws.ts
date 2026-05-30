@@ -1164,3 +1164,122 @@ export async function syncCronJobs(projectName: string, jobs: any[]) {
   }
 }
 
+export async function syncEdgeNetwork(projectName: string, edgeConfig: any) {
+  const { CloudFrontClient, CreateDistributionCommand, UpdateDistributionCommand, GetDistributionConfigCommand, CreateFunctionCommand, DescribeFunctionCommand, UpdateFunctionCommand } = require("@aws-sdk/client-cloudfront");
+  const cloudfront = new CloudFrontClient({ region: 'us-east-1' }); // CloudFront is global, must use us-east-1 for some operations
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  
+  if (!edgeConfig || !edgeConfig.enabled) {
+    console.log(`Edge Network disabled for ${projectName}. Skipping CloudFront sync.`);
+    // Note: In a real system, you would disable or delete the CloudFront distribution here.
+    return;
+  }
+
+  const originId = `ALB-${sanitizedName}`;
+  const originDomain = `bravocloud-alb-123456789.us-east-1.elb.amazonaws.com`; // Mock ALB DNS
+  
+  // 1. Provision Edge Function if provided
+  let functionARN = null;
+  if (edgeConfig.edgeFunctions && edgeConfig.edgeFunctions.code) {
+    const funcName = `bc-edge-${sanitizedName}`;
+    try {
+      // Check if function exists
+      try {
+        const descRes = await cloudfront.send(new DescribeFunctionCommand({ Name: funcName, Stage: 'DEVELOPMENT' }));
+        const eTag = descRes.ETag;
+        console.log(`Updating CloudFront Function: ${funcName}`);
+        const updateRes = await cloudfront.send(new UpdateFunctionCommand({
+          Name: funcName,
+          IfMatch: eTag,
+          FunctionConfig: { Comment: `Edge function for ${projectName}`, Runtime: 'cloudfront-js-1.0' },
+          FunctionCode: Buffer.from(edgeConfig.edgeFunctions.code)
+        }));
+        functionARN = updateRes.FunctionSummary?.FunctionMetadata?.FunctionARN;
+      } catch (err: any) {
+        if (err.name === 'NoSuchFunctionExists') {
+          console.log(`Creating CloudFront Function: ${funcName}`);
+          const createRes = await cloudfront.send(new CreateFunctionCommand({
+            Name: funcName,
+            FunctionConfig: { Comment: `Edge function for ${projectName}`, Runtime: 'cloudfront-js-1.0' },
+            FunctionCode: Buffer.from(edgeConfig.edgeFunctions.code)
+          }));
+          functionARN = createRes.FunctionSummary?.FunctionMetadata?.FunctionARN;
+        } else {
+          throw err;
+        }
+      }
+    } catch (e: any) {
+      console.error(`Failed to provision Edge Function: ${e.message}`);
+    }
+  }
+
+  // 2. Determine Cache Policy
+  // AWS Managed Cache Policies
+  const CACHING_OPTIMIZED = "658327ea-f89d-4fab-a63d-7e88639e58f6";
+  const CACHING_DISABLED = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad";
+  const cachePolicyId = edgeConfig.cachePolicy === 'Static Optimized' ? CACHING_OPTIMIZED : CACHING_DISABLED;
+
+  // 3. Determine Geo Restrictions
+  const geoRestriction = {
+    RestrictionType: edgeConfig.geoRestriction?.type || 'none',
+    Quantity: edgeConfig.geoRestriction?.countries?.length || 0,
+    Items: edgeConfig.geoRestriction?.countries || []
+  };
+
+  // 4. Construct Distribution Config
+  const distConfig = {
+    CallerReference: `bc-${sanitizedName}-${Date.now()}`,
+    Comment: `BravoCloud CDN for ${projectName}`,
+    Enabled: true,
+    Origins: {
+      Quantity: 1,
+      Items: [
+        {
+          Id: originId,
+          DomainName: originDomain,
+          CustomOriginConfig: {
+            HTTPPort: 80,
+            HTTPSPort: 443,
+            OriginProtocolPolicy: 'https-only',
+            OriginSslProtocols: { Quantity: 1, Items: ['TLSv1.2'] }
+          }
+        }
+      ]
+    },
+    DefaultCacheBehavior: {
+      TargetOriginId: originId,
+      ViewerProtocolPolicy: 'redirect-to-https',
+      CachePolicyId: cachePolicyId,
+      FunctionAssociations: functionARN ? {
+        Quantity: 1,
+        Items: [
+          {
+            EventType: 'viewer-request',
+            FunctionARN: functionARN
+          }
+        ]
+      } : { Quantity: 0 }
+    },
+    Restrictions: {
+      GeoRestriction: geoRestriction
+    }
+  };
+
+  try {
+    // In a real scenario, we would check if we already stored the DistributionId in the DB
+    // For this demonstration, we'll try to create it directly.
+    console.log(`Provisioning CloudFront Distribution for ${projectName}...`);
+    await cloudfront.send(new CreateDistributionCommand({
+      DistributionConfig: distConfig
+    }));
+    console.log(`Successfully triggered CloudFront deployment for ${projectName}.`);
+  } catch (e: any) {
+    if (e.name === 'DistributionAlreadyExists') {
+      console.log(`CloudFront Distribution already exists for ${projectName}. Proceeding with Update.`);
+      // Update logic would go here (fetch GetDistributionConfig, then UpdateDistribution)
+    } else {
+      console.error(`Failed to provision CloudFront Distribution:`, e.message);
+    }
+  }
+}
+

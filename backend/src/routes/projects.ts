@@ -957,7 +957,7 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     // Filter allowed fields
     const allowedFields = [
       'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
-      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs'
+      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs', 'edgeNetwork'
     ];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
@@ -1009,6 +1009,12 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
       if (filteredUpdates.cronJobs !== undefined) {
         const { syncCronJobs } = require('../lib/aws');
         syncCronJobs(projectData.name, filteredUpdates.cronJobs).catch((e: any) => console.error("Cron Jobs sync failed:", e));
+      }
+
+      // If Edge Network was updated, trigger sync
+      if (filteredUpdates.edgeNetwork !== undefined) {
+        const { syncEdgeNetwork } = require('../lib/aws');
+        syncEdgeNetwork(projectData.name, filteredUpdates.edgeNetwork).catch((e: any) => console.error("Edge Network sync failed:", e));
       }
     }
 
