@@ -101,6 +101,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
         setActiveSettingsItem("Cron Jobs");
       } else if (pathname.endsWith('/edge')) {
         setActiveSettingsItem("Edge Network");
+      } else if (pathname.endsWith('/advanced')) {
+        setActiveSettingsItem("Advanced");
       } else {
         setActiveSettingsItem("General");
       }
@@ -343,6 +345,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                     if (item === "Serverless Functions") router.push(`/dashboard/project/${projectId}/settings/serverless`);
                     if (item === "Cron Jobs") router.push(`/dashboard/project/${projectId}/settings/cron`);
                     if (item === "Edge Network") router.push(`/dashboard/project/${projectId}/settings/edge`);
+                    if (item === "Advanced") router.push(`/dashboard/project/${projectId}/settings/advanced`);
                   }
                 }}
                 q={q}

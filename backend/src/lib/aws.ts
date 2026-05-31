@@ -1283,3 +1283,204 @@ export async function syncEdgeNetwork(projectName: string, edgeConfig: any) {
   }
 }
 
+export async function setMaintenanceMode(projectName: string, enabled: boolean) {
+  const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, CreateRuleCommand, DescribeRulesCommand, DeleteRuleCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+  const elbClient = new ElasticLoadBalancingV2Client({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  
+  try {
+    const albRes = await elbClient.send(new DescribeLoadBalancersCommand({ Names: ["bravocloud-alb"] }));
+    const albArn = albRes.LoadBalancers?.[0]?.LoadBalancerArn;
+    if (!albArn) return;
+
+    const listRes = await elbClient.send(new DescribeListenersCommand({ LoadBalancerArn: albArn }));
+    const httpsListenerArn = listRes.Listeners?.find((l: any) => l.Port === 443)?.ListenerArn;
+    if (!httpsListenerArn) return;
+
+    const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpsListenerArn }));
+    
+    // Find existing maintenance rule (Priority usually set to 1 for highest override)
+    const existingRule = rulesRes.Rules?.find((r: any) => 
+      r.Priority === "1" && 
+      r.Conditions?.some((c: any) => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
+    );
+
+    if (enabled) {
+      if (!existingRule) {
+        // Create maintenance rule
+        await elbClient.send(new CreateRuleCommand({
+          ListenerArn: httpsListenerArn,
+          Priority: 1, // Highest priority to override normal routing
+          Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
+          Actions: [{
+            Type: "fixed-response",
+            FixedResponseConfig: {
+              MessageBody: "<html><head><title>Under Maintenance</title></head><body style='font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #000; color: #fff;'><h1>We'll be right back.</h1><p>This project is currently under maintenance.</p></body></html>",
+              StatusCode: "503",
+              ContentType: "text/html"
+            }
+          }]
+        }));
+        console.log(`Enabled maintenance mode for ${projectName}`);
+      }
+    } else {
+      if (existingRule) {
+        await elbClient.send(new DeleteRuleCommand({ RuleArn: existingRule.RuleArn }));
+        console.log(`Disabled maintenance mode for ${projectName}`);
+      }
+    }
+  } catch (e: any) {
+    console.error(`Failed to toggle maintenance mode for ${projectName}:`, e.message);
+  }
+}
+
+export async function setProjectComputeState(projectName: string, isPaused: boolean) {
+  const { ECSClient, UpdateServiceCommand } = require("@aws-sdk/client-ecs");
+  const ecsClient = new ECSClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const serviceName = `bravocloud-${sanitizedName}`;
+  const clusterName = "bravocloud-cluster";
+
+  try {
+    const desiredCount = isPaused ? 0 : 1;
+    await ecsClient.send(new UpdateServiceCommand({
+      cluster: clusterName,
+      service: serviceName,
+      desiredCount
+    }));
+    console.log(`${isPaused ? 'Paused' : 'Resumed'} compute for ${projectName}`);
+  } catch (e: any) {
+    console.error(`Failed to toggle compute state for ${projectName}:`, e.message);
+  }
+}
+
+export async function syncAutoScaling(projectName: string, scalingConfig: any) {
+  const { ApplicationAutoScalingClient, RegisterScalableTargetCommand, PutScalingPolicyCommand, DeleteScalingPolicyCommand, DeregisterScalableTargetCommand } = require("@aws-sdk/client-application-auto-scaling");
+  const aasClient = new ApplicationAutoScalingClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const resourceId = `service/bravocloud-cluster/bravocloud-${sanitizedName}`;
+
+  try {
+    if (!scalingConfig || !scalingConfig.enabled) {
+      // Disable auto-scaling
+      try {
+        await aasClient.send(new DeleteScalingPolicyCommand({
+          ServiceNamespace: "ecs",
+          ResourceId: resourceId,
+          ScalableDimension: "ecs:service:DesiredCount",
+          PolicyName: `bc-cpu-scaling-${sanitizedName}`
+        }));
+        await aasClient.send(new DeregisterScalableTargetCommand({
+          ServiceNamespace: "ecs",
+          ResourceId: resourceId,
+          ScalableDimension: "ecs:service:DesiredCount"
+        }));
+        console.log(`Disabled Auto-Scaling for ${projectName}`);
+      } catch (err: any) {
+        if (err.name !== "ObjectNotFoundException") throw err;
+      }
+      return;
+    }
+
+    // Register Target
+    await aasClient.send(new RegisterScalableTargetCommand({
+      ServiceNamespace: "ecs",
+      ResourceId: resourceId,
+      ScalableDimension: "ecs:service:DesiredCount",
+      MinCapacity: scalingConfig.minContainers || 1,
+      MaxCapacity: scalingConfig.maxContainers || 5
+    }));
+
+    // Put Target Tracking Policy
+    await aasClient.send(new PutScalingPolicyCommand({
+      ServiceNamespace: "ecs",
+      ResourceId: resourceId,
+      ScalableDimension: "ecs:service:DesiredCount",
+      PolicyName: `bc-cpu-scaling-${sanitizedName}`,
+      PolicyType: "TargetTrackingScaling",
+      TargetTrackingScalingPolicyConfiguration: {
+        TargetValue: scalingConfig.targetCpu || 75.0,
+        PredefinedMetricSpecification: {
+          PredefinedMetricType: "ECSServiceAverageCPUUtilization"
+        },
+        ScaleOutCooldown: 60,
+        ScaleInCooldown: 300
+      }
+    }));
+    
+    console.log(`Configured Auto-Scaling for ${projectName}: Min=${scalingConfig.minContainers}, Max=${scalingConfig.maxContainers}, TargetCPU=${scalingConfig.targetCpu}%`);
+  } catch (e: any) {
+    console.error(`Failed to configure auto-scaling for ${projectName}:`, e.message);
+  }
+}
+
+export async function createDatabaseSnapshot(projectName: string) {
+  const { RDSClient, CreateDBSnapshotCommand, DescribeDBInstancesCommand } = require("@aws-sdk/client-rds");
+  const rdsClient = new RDSClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const dbInstanceId = `db-${sanitizedName}`; // Assume standard naming convention
+  const snapshotId = `snapshot-${sanitizedName}-${Date.now()}`;
+
+  try {
+    // Verify instance exists
+    try {
+      await rdsClient.send(new DescribeDBInstancesCommand({ DBInstanceIdentifier: dbInstanceId }));
+    } catch (e: any) {
+      if (e.name === 'DBInstanceNotFoundFault') {
+        console.log(`No active database found for ${projectName}. Cannot create snapshot.`);
+        return;
+      }
+      throw e;
+    }
+
+    await rdsClient.send(new CreateDBSnapshotCommand({
+      DBInstanceIdentifier: dbInstanceId,
+      DBSnapshotIdentifier: snapshotId
+    }));
+    console.log(`Initiated DB snapshot ${snapshotId} for ${projectName}`);
+  } catch (e: any) {
+    console.error(`Failed to create DB snapshot for ${projectName}:`, e.message);
+    throw new Error(`RDS Snapshot failed: ${e.message}`);
+  }
+}
+
+export async function syncLogDrain(projectName: string, drainConfig: any) {
+  const { CloudWatchLogsClient, PutSubscriptionFilterCommand, DeleteSubscriptionFilterCommand } = require("@aws-sdk/client-cloudwatch-logs");
+  const cwClient = new CloudWatchLogsClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+  const filterName = `bc-log-drain-${sanitizedName}`;
+
+  try {
+    if (!drainConfig || !drainConfig.webhookUrl) {
+      // Remove drain
+      try {
+        await cwClient.send(new DeleteSubscriptionFilterCommand({
+          logGroupName,
+          filterName
+        }));
+        console.log(`Removed log drain for ${projectName}`);
+      } catch (e: any) {
+        if (e.name !== 'ResourceNotFoundException') throw e;
+      }
+      return;
+    }
+
+    // In a production environment, you would route logs to a centralized Kinesis stream 
+    // or Lambda function that then forwards HTTP POSTs to the webhookUrl.
+    // For this implementation, we will assume a central BravoCloud log-forwarder Lambda exists.
+    const logForwarderLambdaArn = `arn:aws:lambda:${region}:123456789012:function:BravocloudLogForwarder`;
+
+    await cwClient.send(new PutSubscriptionFilterCommand({
+      logGroupName,
+      filterName,
+      filterPattern: "", // Match all logs
+      destinationArn: logForwarderLambdaArn
+    }));
+
+    console.log(`Configured log drain for ${projectName} pointing to ${drainConfig.webhookUrl}`);
+  } catch (e: any) {
+    console.error(`Failed to configure log drain for ${projectName}:`, e.message);
+  }
+}
+

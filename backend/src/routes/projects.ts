@@ -957,7 +957,8 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     // Filter allowed fields
     const allowedFields = [
       'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
-      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs', 'edgeNetwork'
+      'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs', 'edgeNetwork',
+      'maintenanceMode', 'isPaused', 'ownerEmail', 'autoScaling', 'logDrain'
     ];
     const filteredUpdates: any = {};
     for (const key of allowedFields) {
@@ -1016,13 +1017,63 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
         const { syncEdgeNetwork } = require('../lib/aws');
         syncEdgeNetwork(projectData.name, filteredUpdates.edgeNetwork).catch((e: any) => console.error("Edge Network sync failed:", e));
       }
+
+      // If Maintenance Mode was updated, trigger sync
+      if (filteredUpdates.maintenanceMode !== undefined) {
+        const { setMaintenanceMode } = require('../lib/aws');
+        setMaintenanceMode(projectData.name, filteredUpdates.maintenanceMode).catch((e: any) => console.error("Maintenance sync failed:", e));
+      }
+
+      // If Pause State was updated, trigger sync
+      if (filteredUpdates.isPaused !== undefined) {
+        const { setProjectComputeState } = require('../lib/aws');
+        setProjectComputeState(projectData.name, filteredUpdates.isPaused).catch((e: any) => console.error("Compute state sync failed:", e));
+      }
+
+      // If Auto-Scaling was updated, trigger sync
+      if (filteredUpdates.autoScaling !== undefined) {
+        const { syncAutoScaling } = require('../lib/aws');
+        syncAutoScaling(projectData.name, filteredUpdates.autoScaling).catch((e: any) => console.error("AutoScaling sync failed:", e));
+      }
+
+      // If Log Drain was updated, trigger sync
+      if (filteredUpdates.logDrain !== undefined) {
+        const { syncLogDrain } = require('../lib/aws');
+        syncLogDrain(projectData.name, filteredUpdates.logDrain).catch((e: any) => console.error("Log drain sync failed:", e));
+      }
     }
 
     const updatedDoc = await projectRef.get();
-    res.json({ success: true, project: updatedDoc.data() });
+    res.json({ message: 'Project updated', project: { id: updatedDoc.id, ...updatedDoc.data() } });
   } catch (error: any) {
     console.error('Error updating project:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Trigger a manual database snapshot
+router.post('/:id/snapshot', verifyToken, async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    const projectRef = db.collection('projects').doc(id);
+    const projectDoc = await projectRef.get();
+
+    if (!projectDoc.exists) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const projectData = projectDoc.data() as any;
+    if (projectData.userId !== req.user.uid) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const { createDatabaseSnapshot } = require('../lib/aws');
+    await createDatabaseSnapshot(projectData.name);
+    
+    res.json({ message: 'Snapshot successfully initiated' });
+  } catch (error: any) {
+    console.error('Error creating snapshot:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
