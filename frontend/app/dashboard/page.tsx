@@ -48,9 +48,9 @@ export default function Dashboard() {
   const fetchDashboardData = () => {
     setLoading(true);
     Promise.all([
-      fetch("http://localhost:4000/api/github/repos", { credentials: "include" }),
-      fetch("http://localhost:4000/auth/me", { credentials: "include" }),
-      fetch("http://localhost:4000/api/projects", { credentials: "include" })
+      fetch("https://bravo-cloud-ydew.vercel.app/api/github/repos", { credentials: "include" }),
+      fetch("https://bravo-cloud-ydew.vercel.app/auth/me", { credentials: "include" }),
+      fetch("https://bravo-cloud-ydew.vercel.app/api/projects", { credentials: "include" })
     ])
       .then(async ([reposRes, userRes, projectsRes]) => {
         if (!reposRes.ok || !userRes.ok) {
@@ -77,7 +77,7 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:4000/auth/logout", {
+      await fetch("https://bravo-cloud-ydew.vercel.app/auth/logout", {
         method: "POST",
         credentials: "include"
       });

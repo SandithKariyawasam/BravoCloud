@@ -23,7 +23,7 @@ export default function Home() {
         </p>
         
         <a 
-          href="http://localhost:4000/auth/github"
+          href="https://bravo-cloud-ydew.vercel.app/auth/github"
           className="group relative inline-flex items-center justify-center px-8 py-4 font-semibold text-black transition-all duration-300 bg-white border border-white rounded-full hover:bg-gray-200 hover:scale-105 hover:shadow-[0_0_40px_rgba(255,255,255,0.2)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white focus:ring-offset-black"
         >
           <svg className="w-6 h-6 mr-3 group-hover:animate-bounce" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
