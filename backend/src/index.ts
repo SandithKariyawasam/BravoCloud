@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
@@ -8,8 +7,6 @@ import githubRoutes from './routes/github';
 import projectsRoutes from './routes/projects';
 import deploymentsRoutes from './routes/deployments';
 import { db } from './lib/firebase';
-
-const FirebaseStore = require('connect-session-firebase')(session);
 
 dotenv.config();
 
@@ -25,23 +22,7 @@ app.use(express.json());
 
 app.set('trust proxy', 1);
 
-app.use(session({
-  store: new FirebaseStore({
-    database: db
-  }),
-  secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true, // Required for cross-origin cookies on Vercel
-    sameSite: 'none', // Required for cross-origin cookies
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
-
 app.use(passport.initialize());
-app.use(passport.session());
 
 app.use('/auth', authRoutes);
 app.use('/api/github', githubRoutes);
@@ -54,6 +35,17 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+// Global error handler for debugging
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('Fatal Error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: err.message || String(err),
+    oauth_details: err.oauthError ? err.oauthError.data : null,
+    stack: process.env.NODE_ENV === 'production' ? 'hidden' : err.stack
+  });
 });
 
 if (process.env.NODE_ENV !== 'production') {

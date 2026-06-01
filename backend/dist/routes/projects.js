@@ -6,15 +6,9 @@ const templates_1 = require("../lib/templates");
 const github_1 = require("../lib/github");
 const aws_1 = require("../lib/aws");
 const router = (0, express_1.Router)();
-// Middleware to ensure user is authenticated
-const requireAuth = (req, res, next) => {
-    if (!req.isAuthenticated()) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-};
+const middleware_1 = require("../lib/middleware");
 // Create a new project
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', middleware_1.verifyToken, async (req, res) => {
     try {
         const { name, repoUrl, framework, branch = "main", rootDir = "./", buildCommand, outputDirectory, installCommand, envVars } = req.body;
         const userId = req.user.id; // DB ID from session
@@ -143,7 +137,7 @@ router.post('/', requireAuth, async (req, res) => {
     }
 });
 // Get user's projects
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', middleware_1.verifyToken, async (req, res) => {
     try {
         const userId = req.user.id;
         const projectsSnapshot = await firebase_1.db.collection('projects')

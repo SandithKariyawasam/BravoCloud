@@ -3,15 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const rest_1 = require("@octokit/rest");
 const router = (0, express_1.Router)();
-const requireAuth = (req, res, next) => {
-    if (!req.isAuthenticated() || !req.user?.accessToken) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
-};
-router.get('/repos', requireAuth, async (req, res) => {
+const middleware_1 = require("../lib/middleware");
+router.get('/repos', middleware_1.verifyToken, async (req, res) => {
     try {
-        const octokit = new rest_1.Octokit({ auth: req.user.accessToken });
+        const octokit = new rest_1.Octokit({ auth: req.user.githubToken });
         const response = await octokit.rest.repos.listForAuthenticatedUser({
             sort: 'updated',
             per_page: 50,
@@ -35,10 +30,10 @@ router.get('/repos', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch repositories' });
     }
 });
-router.get('/repos/:owner/:repo/branches', requireAuth, async (req, res) => {
+router.get('/repos/:owner/:repo/branches', middleware_1.verifyToken, async (req, res) => {
     try {
         const { owner, repo } = req.params;
-        const octokit = new rest_1.Octokit({ auth: req.user.accessToken });
+        const octokit = new rest_1.Octokit({ auth: req.user.githubToken });
         const response = await octokit.rest.repos.listBranches({
             owner,
             repo,
@@ -56,10 +51,10 @@ router.get('/repos/:owner/:repo/branches', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch branches' });
     }
 });
-router.get('/repos/:owner/:repo/branches/:branch/directories', requireAuth, async (req, res) => {
+router.get('/repos/:owner/:repo/branches/:branch/directories', middleware_1.verifyToken, async (req, res) => {
     try {
         const { owner, repo, branch } = req.params;
-        const octokit = new rest_1.Octokit({ auth: req.user.accessToken });
+        const octokit = new rest_1.Octokit({ auth: req.user.githubToken });
         // First, get the commit SHA for the branch
         const branchData = await octokit.rest.repos.getBranch({
             owner,
@@ -87,14 +82,14 @@ router.get('/repos/:owner/:repo/branches/:branch/directories', requireAuth, asyn
         res.status(500).json({ error: 'Failed to fetch directory structure' });
     }
 });
-router.get('/repos/:owner/:repo/branches/:branch/contents', requireAuth, async (req, res) => {
+router.get('/repos/:owner/:repo/branches/:branch/contents', middleware_1.verifyToken, async (req, res) => {
     try {
         const { owner, repo, branch } = req.params;
         const { path } = req.query; // e.g. "frontend/package.json" or "package.json"
         if (!path) {
             return res.status(400).json({ error: 'Path query parameter is required' });
         }
-        const octokit = new rest_1.Octokit({ auth: req.user.accessToken });
+        const octokit = new rest_1.Octokit({ auth: req.user.githubToken });
         const { data } = await octokit.rest.repos.getContent({
             owner,
             repo,
