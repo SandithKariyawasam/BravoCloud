@@ -31,6 +31,14 @@ export default function Home() {
           </svg>
           Continue with GitHub
         </a>
+        
+        {/* Security / Permission Disclaimer */}
+        <div className="mt-8 flex items-start text-left max-w-sm mx-auto bg-white/5 border border-white/10 rounded-xl p-4 transition-all hover:bg-white/10">
+          <svg className="w-5 h-5 flex-shrink-0 text-gray-400 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            BravoCloud securely requests <span className="text-gray-200 font-medium">repository & workflow</span> access to automate your Dockerfile creation and CI/CD pipelines directly into your codebase.
+          </p>
+        </div>
       </main>
     </div>
   );

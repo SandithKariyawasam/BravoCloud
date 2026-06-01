@@ -13,24 +13,29 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-apprunner": "^3.1057.0",
+    "@aws-sdk/client-ecr": "^3.1057.0",
     "@octokit/rest": "^19.0.13",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "firebase-admin": "^13.10.0",
+    "libsodium-wrappers": "^0.8.4",
     "passport": "^0.7.0",
-    "passport-github2": "^0.1.12"
+    "passport-github2": "^0.1.12",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "^25.9.1",
     "@types/passport": "^1.0.17",
     "@types/passport-github2": "^1.2.9",
     "nodemon": "^3.1.14",
-    "prisma": "^6.19.3",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
