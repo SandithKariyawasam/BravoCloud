@@ -3,7 +3,7 @@ name: BravoCloud Deployment
 on:
   push:
     branches:
-      - dev
+      - test
 
 jobs:
   build-and-notify:
@@ -40,12 +40,12 @@ jobs:
         if: success()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "a6b7bc42-e833-4090-bc5a-6b7c65243465", "deploymentId": "7888ba04-c2ff-4970-914b-b70321bf0505", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "498f55ab-7d4c-4dcf-a487-cf13f1a835de", "deploymentId": "3af9c52b-9948-484f-bc95-bb89388e1e75", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
           http://localhost:4000/api/deployments/webhook
 
       - name: Notify BravoCloud Failure
         if: failure()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "a6b7bc42-e833-4090-bc5a-6b7c65243465", "deploymentId": "7888ba04-c2ff-4970-914b-b70321bf0505", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "498f55ab-7d4c-4dcf-a487-cf13f1a835de", "deploymentId": "3af9c52b-9948-484f-bc95-bb89388e1e75", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
           http://localhost:4000/api/deployments/webhook
