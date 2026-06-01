@@ -10,6 +10,20 @@ import {
   Puzzle, BarChart3, MessageSquare
 } from "lucide-react";
 
+interface UserProfile {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl?: string;
+}
+
+interface SidebarProps {
+  user?: UserProfile | null;
+  isDropdownOpen?: boolean;
+  setIsDropdownOpen?: (isOpen: boolean) => void;
+  onLogout?: () => void;
+}
+
 const BYOKIcon = () => (
   <div className="relative w-4 h-4 flex items-center justify-center opacity-90">
     <UserRound size={12} className="absolute left-0 bottom-0 text-current" />
@@ -17,7 +31,7 @@ const BYOKIcon = () => (
   </div>
 );
 
-export default function Sidebar() {
+export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLogout }: SidebarProps) {
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [activeItem, setActiveItem] = useState<string>("Projects");
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
@@ -34,7 +48,7 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="w-64 flex flex-col h-screen overflow-hidden bg-black border-r border-[#27272a]/40 pb-4">
+    <div className="w-64 flex flex-col h-screen overflow-hidden bg-black border-r border-[#27272a]/40">
       {/* Search (Permanently Shown) */}
       <div className="p-3 bg-black z-10 border-b border-transparent">
         <div className="flex items-center bg-[#18181b] border border-[#27272a] rounded-md px-3 py-1.5 transition-all focus-within:border-[#3f3f46] focus-within:bg-[#18181b] group">
@@ -48,7 +62,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-hide">
+      <div className="flex-1 overflow-y-auto custom-sidebar-scrollbar pb-4">
         {/* MAIN VIEW */}
         {(q || view === "main") && (
           <nav className={`px-2 space-y-0.5 ${!q && "mt-1 animate-slide-in"}`}>
@@ -176,6 +190,44 @@ export default function Sidebar() {
           </nav>
         )}
       </div>
+
+      {/* USER PROFILE FOOTER */}
+      {user && (
+        <div className="p-4 border-t border-[#27272a]/40 bg-black relative">
+          {isDropdownOpen && setIsDropdownOpen && onLogout && (
+            <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden animate-slide-in">
+              <button 
+                onClick={onLogout}
+                className="w-full text-left px-4 py-3 text-sm text-[#a1a1aa] hover:bg-[#27272a] hover:text-white transition-colors flex items-center gap-2 font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign Out
+              </button>
+            </div>
+          )}
+          
+          <div 
+            onClick={() => setIsDropdownOpen && setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-3 px-3 py-2 bg-[#18181b]/50 border border-[#27272a] rounded-xl hover:bg-[#27272a] transition-colors cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full overflow-hidden border border-[#3f3f46] group-hover:border-white transition-colors flex-shrink-0">
+              <img 
+                src={user.avatarUrl || "https://github.com/ghost.png"} 
+                alt={user.username} 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex flex-col overflow-hidden">
+              <span className="text-sm font-semibold text-[#a1a1aa] group-hover:text-white transition-colors truncate">
+                {user.displayName || user.username}
+              </span>
+              <span className="text-xs text-[#71717a] truncate">@{user.username}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
