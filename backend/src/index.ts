@@ -9,7 +9,7 @@ import projectsRoutes from './routes/projects';
 import deploymentsRoutes from './routes/deployments';
 import { db } from './lib/firebase';
 
-const FirebaseStore = require('connect-session-firebase')(session);
+const { FirestoreStore } = require('@google-cloud/connect-firestore');
 
 dotenv.config();
 
@@ -26,8 +26,9 @@ app.use(express.json());
 app.set('trust proxy', 1);
 
 app.use(session({
-  store: new FirebaseStore({
-    database: db
+  store: new FirestoreStore({
+    dataset: db,
+    kind: 'express-sessions',
   }),
   secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
   resave: false,
