@@ -40,12 +40,12 @@ jobs:
         if: success()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "42948f36-b265-4220-9f08-0a3f909793b9", "deploymentId": "e95e0833-2e8f-4b9f-9a68-21d7dcfcc3bb", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "ojoPPv3IDvR6ZIRmPb0b", "deploymentId": "s5Y5yFn6kDmPTheHwFcy", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
           http://localhost:4000/api/deployments/webhook
 
       - name: Notify BravoCloud Failure
         if: failure()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "42948f36-b265-4220-9f08-0a3f909793b9", "deploymentId": "e95e0833-2e8f-4b9f-9a68-21d7dcfcc3bb", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "ojoPPv3IDvR6ZIRmPb0b", "deploymentId": "s5Y5yFn6kDmPTheHwFcy", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
           http://localhost:4000/api/deployments/webhook
