@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import session from 'express-session';
 import passport from 'passport';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import githubRoutes from './routes/github';
+import projectsRoutes from './routes/projects';
+import deploymentsRoutes from './routes/deployments';
+import { db } from './lib/firebase';
 
 dotenv.config();
 
@@ -18,27 +20,38 @@ app.use(cors({
 
 app.use(express.json());
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'bravocloud_super_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-}));
+app.set('trust proxy', 1);
 
 app.use(passport.initialize());
-app.use(passport.session());
 
 app.use('/auth', authRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/projects', projectsRoutes);
+app.use('/api/deployments', deploymentsRoutes);
+
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
+});
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-  console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+// Global error handler for debugging
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('Fatal Error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: err.message || String(err),
+    oauth_details: err.oauthError ? err.oauthError.data : null,
+    stack: process.env.NODE_ENV === 'production' ? 'hidden' : err.stack
+  });
 });
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;

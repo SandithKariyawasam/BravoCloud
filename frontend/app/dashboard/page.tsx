@@ -33,34 +33,105 @@ export default function Dashboard() {
   const [dashboardView, setDashboardView] = useState<"projects" | "import">("projects");
   const [deployedProjects, setDeployedProjects] = useState<any[]>([]); // Mock state for now
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
+  const [redeployingProjectId, setRedeployingProjectId] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredRepos = repos.filter(repo => 
+    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (repo.description && repo.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   useEffect(() => {
+    let token = localStorage.getItem("bravocloud_token");
+    
+    // Check if token is in URL (redirect from OAuth)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get("token");
+    
+    if (urlToken) {
+      token = urlToken;
+      localStorage.setItem("bravocloud_token", urlToken);
+      window.history.replaceState({}, document.title, "/dashboard");
+    }
+
+    if (!token) {
+      window.location.href = "/";
+      return;
+    }
+
+    fetchDashboardData(token);
+  }, []);
+
+  const fetchDashboardData = (token: string) => {
+    setLoading(true);
+    
+    const headers = { "Authorization": `Bearer ${token}` };
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    
     Promise.all([
-      fetch("http://localhost:4000/api/github/repos", { credentials: "include" }),
-      fetch("http://localhost:4000/auth/me", { credentials: "include" })
+      fetch(`${apiUrl}/api/github/repos`, { headers }),
+      fetch(`${apiUrl}/auth/me`, { headers }),
+      fetch(`${apiUrl}/api/projects`, { headers })
     ])
-      .then(async ([reposRes, userRes]) => {
+      .then(async ([reposRes, userRes, projectsRes]) => {
         if (!reposRes.ok || !userRes.ok) {
-          throw new Error("Failed to fetch data");
+          const errorText = await userRes.text();
+          throw new Error(`Auth Error: ${userRes.status} - ${errorText}`);
         }
+        
         const reposData = await reposRes.json();
         const userData = await userRes.json();
+        
+        let projectsData = { projects: [] };
+        if (projectsRes.ok) {
+          projectsData = await projectsRes.json();
+        }
 
-        setRepos(reposData.repos);
+        setRepos(reposData.repos || []);
         setUser(userData.user);
+        setDeployedProjects(projectsData.projects || []);
         setLoading(false);
       })
       .catch((err) => {
         console.error(err);
-        window.location.href = "/";
+        alert(err.message);
+        // Temporarily disabling the redirect so you can inspect the console!
+        // window.location.href = "/";
       });
-  }, []);
+  };
+
+  const handleRedeploy = async (projectId: string) => {
+    setRedeployingProjectId(projectId);
+    try {
+      const token = localStorage.getItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/redeploy`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to redeploy");
+      }
+      
+      // Refresh dashboard data to show QUEUED status
+      if (token) fetchDashboardData(token);
+    } catch (error: any) {
+      alert("Redeploy failed: " + error.message);
+    } finally {
+      setRedeployingProjectId(null);
+    }
+  };
 
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:4000/auth/logout", {
-        method: "POST",
-        credentials: "include"
+      localStorage.removeItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      await fetch(`${apiUrl}/auth/logout`, {
+        method: "POST"
       });
       window.location.href = "/";
     } catch (error) {
@@ -117,25 +188,111 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    {/* Map over deployed projects if they existed */}
+                    {deployedProjects.map((project: any) => {
+                      const latestDeployment = project.deployments?.[0];
+                      const status = latestDeployment?.status || 'UNKNOWN';
+                      const isBuilding = status === 'QUEUED' || status === 'BUILDING';
+                      const isSuccess = status === 'SUCCESS' || status === 'DEPLOYED';
+                      const isFailed = status === 'FAILED';
+                      
+                      return (
+                        <div key={project.id} className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0">
+                                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                              </div>
+                              <h3 className="font-semibold text-lg truncate text-white">{project.name}</h3>
+                            </div>
+                            <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase flex items-center gap-1.5
+                              ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
+                                isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
+                                'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
+                              {isBuilding && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" />}
+                              {status}
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-col gap-2 mb-6">
+                            <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" /></svg>
+                              <span className="truncate">{project.repoUrl.replace('https://github.com/', '')}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                              <span>{project.framework || 'Detected framework'}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-auto pt-4 border-t border-[#27272a]">
+                            <span className="text-xs text-[#71717a]">
+                              Created {new Date(project.createdAt).toLocaleDateString()}
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleRedeploy(project.id)}
+                                disabled={redeployingProjectId === project.id}
+                                className="text-xs font-semibold px-3 py-1.5 bg-[#27272a] text-white rounded-lg hover:bg-[#3f3f46] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {redeployingProjectId === project.id ? (
+                                  <>
+                                    <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Redeploying...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                    Redeploy
+                                  </>
+                                )}
+                              </button>
+                              <a href={project.subdomain ? `https://${project.subdomain}` : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
+                                Visit Site
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
             ) : (
               <>
                 {/* Import View */}
-                <div className="mb-10 flex items-center gap-5">
-                  <button
-                    onClick={() => setDashboardView("projects")}
-                    className="p-2.5 bg-[#18181b] border border-[#27272a] rounded-lg hover:bg-[#27272a] hover:text-white text-[#a1a1aa] transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                  </button>
-                  <div>
-                    <h2 className="text-4xl font-bold mb-2 tracking-tight">Import Git Repository</h2>
-                    <p className="text-[#a1a1aa] text-lg">Select a repository from your connected GitHub account to deploy.</p>
+                <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="flex items-center gap-5">
+                    <button
+                      onClick={() => setDashboardView("projects")}
+                      className="p-2.5 bg-[#18181b] border border-[#27272a] rounded-lg hover:bg-[#27272a] hover:text-white text-[#a1a1aa] transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                      </svg>
+                    </button>
+                    <div>
+                      <h2 className="text-4xl font-bold mb-2 tracking-tight">Import Git Repository</h2>
+                      <p className="text-[#a1a1aa] text-lg">Select a repository from your connected GitHub account to deploy.</p>
+                    </div>
+                  </div>
+                  
+                  {/* Search Bar */}
+                  <div className="relative w-full md:w-72">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="w-5 h-5 text-[#a1a1aa]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search repositories..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full bg-[#18181b] border border-[#27272a] text-white rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/50 transition-all placeholder-[#71717a]"
+                    />
                   </div>
                 </div>
 
@@ -146,7 +303,8 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                    {repos.map((repo) => (
+                    {filteredRepos.length > 0 ? (
+                      filteredRepos.map((repo) => (
                       <div
                         key={repo.id}
                         className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col"
@@ -181,7 +339,15 @@ export default function Dashboard() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                    ))
+                    ) : (
+                      <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#a1a1aa]">
+                        <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <p className="text-lg">No repositories found matching "{searchQuery}"</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -205,7 +371,15 @@ export default function Dashboard() {
       </div>
 
       {selectedRepo && (
-        <ProjectConfigModal repo={selectedRepo} onClose={() => setSelectedRepo(null)} />
+        <ProjectConfigModal
+          repo={selectedRepo}
+          onClose={() => {
+            setSelectedRepo(null);
+            setDashboardView("projects");
+            const token = localStorage.getItem("bravocloud_token");
+            if (token) fetchDashboardData(token); // Refresh the list of deployed projects
+          }}
+        />
       )}
     </div>
   );
