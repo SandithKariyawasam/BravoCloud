@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../lib/firebase';
-import { deployToAppRunner } from '../lib/aws';
+import { deployToAppRunner, getAwsAccountId } from '../lib/aws';
 
 const router = Router();
 
@@ -33,7 +33,7 @@ router.post('/webhook', async (req: any, res: any) => {
           // Generate the expected ECR URI format to pass to App Runner
           // In production, you would fetch this using DescribeRepositories or pass it in the webhook
           const region = process.env.AWS_REGION || "us-east-1";
-          const accountId = process.env.AWS_ACCOUNT_ID || "123456789012";
+          const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
           const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
 
           const envs = project.envVars ? (project.envVars as Record<string, string>) : undefined;
