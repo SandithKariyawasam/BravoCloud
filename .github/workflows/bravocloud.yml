@@ -40,12 +40,12 @@ jobs:
         if: success()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "gF14ugnozrcBIycsxoox", "deploymentId": "KqHv9zHXPDfLJeGcT6O8", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "gF14ugnozrcBIycsxoox", "deploymentId": "m15cF1wOvN91eOSQhew2", "status": "SUCCESS", "commitHash": "'"${GITHUB_SHA}"'"}' \
           https://bravo-cloud-ydew.vercel.app/api/deployments/webhook
 
       - name: Notify BravoCloud Failure
         if: failure()
         run: |
           curl -X POST -H "Content-Type: application/json" \
-          -d '{"projectId": "gF14ugnozrcBIycsxoox", "deploymentId": "KqHv9zHXPDfLJeGcT6O8", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
+          -d '{"projectId": "gF14ugnozrcBIycsxoox", "deploymentId": "m15cF1wOvN91eOSQhew2", "status": "FAILED", "commitHash": "'"${GITHUB_SHA}"'"}' \
           https://bravo-cloud-ydew.vercel.app/api/deployments/webhook
