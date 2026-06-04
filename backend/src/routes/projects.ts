@@ -337,8 +337,8 @@ router.get('/:id/deployments', verifyToken, async (req: any, res: any) => {
       .where('projectId', '==', projectId)
       .get();
       
-    let deployments = depsSnapshot.docs.map(d => d.data());
-    deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    let deployments = depsSnapshot.docs.map(d => ({ ...d.data(), projectName: project.name }));
+    deployments.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
     res.json({ deployments });
   } catch (error) {

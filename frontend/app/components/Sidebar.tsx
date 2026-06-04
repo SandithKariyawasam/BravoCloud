@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutGrid, Box, List, Activity, Gauge, Eye, Shield, Globe,
   Variable, Globe2, Plug, Database, ToggleLeft, Cpu, Network, Maximize,
@@ -32,8 +33,23 @@ const BYOKIcon = () => (
 );
 
 export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLogout }: SidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isProjectView = pathname?.includes('/dashboard/project/');
+  const projectId = isProjectView ? pathname.split('/')[3] : null;
+  const isDeploymentsPage = pathname?.endsWith('/deployments');
+  
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [activeItem, setActiveItem] = useState<string>("Projects");
+
+  // Sync active item with URL
+  useEffect(() => {
+    if (isDeploymentsPage) {
+      setActiveItem("Deployments");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage)) {
+      setActiveItem("Projects");
+    }
+  }, [pathname, isDeploymentsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -66,8 +82,22 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
         {/* MAIN VIEW */}
         {(q || view === "main") && (
           <nav className={`px-2 space-y-0.5 ${!q && "mt-1 animate-slide-in"}`}>
-            <SidebarItem icon={<LayoutGrid size={16} />} label="Projects" active={!q && view === "main" && activeItem === "Projects"} onClick={() => handleSelect("main", setActiveItem, "Projects")} q={q} category="Main" />
-            <SidebarItem icon={<Box size={16} />} label="Deployments" active={!q && view === "main" && activeItem === "Deployments"} onClick={() => handleSelect("main", setActiveItem, "Deployments")} q={q} category="Main" />
+            <SidebarItem icon={<LayoutGrid size={16} />} label={isProjectView ? "Overview" : "Projects"} active={!q && view === "main" && activeItem === "Projects"} onClick={() => {
+              handleSelect("main", setActiveItem, "Projects");
+              if (isProjectView && projectId) {
+                router.push(`/dashboard/project/${projectId}`);
+              } else {
+                router.push('/dashboard');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Box size={16} />} label="Deployments" active={!q && view === "main" && activeItem === "Deployments"} onClick={() => {
+              handleSelect("main", setActiveItem, "Deployments");
+              if (isProjectView && projectId) {
+                router.push(`/dashboard/project/${projectId}/deployments`);
+              } else {
+                router.push('/dashboard/deployments');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => handleSelect("main", setActiveItem, "Logs")} q={q} category="Main" />
             <SidebarItem icon={<Activity size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => handleSelect("main", setActiveItem, "Analytics")} q={q} category="Main" />
             <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
