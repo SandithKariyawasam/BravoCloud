@@ -101,7 +101,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
   }, [projectId]);
 
   const copySnippet = () => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : "https://bravocloud.vercel.app";
+    const origin = process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bravo-cloud-ydew.vercel.app";
     const snippet = `<script src="${origin}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`;
     navigator.clipboard.writeText(snippet);
     setCopied(true);
@@ -174,7 +174,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             
             <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
               <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
-                {`<script src="${typeof window !== 'undefined' ? window.location.origin : "https://bravocloud.vercel.app"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
+                {`<script src="${process.env.NEXT_PUBLIC_FRONTEND_URL || "https://bravo-cloud-ydew.vercel.app"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
               </div>
               <button 
                 onClick={copySnippet}
