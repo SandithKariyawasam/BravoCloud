@@ -1,11 +1,14 @@
 import Image from "next/image";
 import BackgroundAnimation from "./components/BackgroundAnimation";
+import { Analytics } from "@vercel/analytics/next"
 
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen items-center justify-center bg-black font-sans text-white relative overflow-hidden">
       <BackgroundAnimation />
       {/* Background glow effects - Removed for B&W theme */}
+
+      <Analytics />
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-white/5 blur-[150px] rounded-full pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
 

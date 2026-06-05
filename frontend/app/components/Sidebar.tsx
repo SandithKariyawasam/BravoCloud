@@ -39,6 +39,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const projectId = isProjectView ? pathname.split('/')[3] : null;
   const isDeploymentsPage = pathname?.endsWith('/deployments');
   const isLogsPage = pathname?.endsWith('/logs');
+  const isAnalyticsPage = pathname?.endsWith('/analytics');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
   const [activeItem, setActiveItem] = useState<string>("Projects");
@@ -49,10 +50,12 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Deployments");
     } else if (isLogsPage) {
       setActiveItem("Logs");
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage)) {
-      setActiveItem("Projects");
+    } else if (isAnalyticsPage) {
+      setActiveItem("Analytics");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage)) {
+      setActiveItem(isProjectView ? "Overview" : "Overview");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isProjectView]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -108,8 +111,13 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                   router.push(`/dashboard/project/${projectId}/logs`);
                 }
               }} q={q} category="Main" />
+              <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
+                handleSelect("main", setActiveItem, "Analytics");
+                if (projectId) {
+                  router.push(`/dashboard/project/${projectId}/analytics`);
+                }
+              }} q={q} category="Main" />
             )}
-            <SidebarItem icon={<Activity size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => handleSelect("main", setActiveItem, "Analytics")} q={q} category="Main" />
             <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
             <SidebarItem icon={<Shield size={16} />} label="Firewall" active={!q && view === "main" && activeItem === "Firewall"} onClick={() => handleSelect("main", setActiveItem, "Firewall")} q={q} category="Main" />
