@@ -570,13 +570,14 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     // Get latest deployments
     const deploymentsSnapshot = await db.collection('deployments')
       .where('projectId', '==', projectId)
-      .orderBy('createdAt', 'desc')
-      .limit(1)
       .get();
       
     if (deploymentsSnapshot.empty) return res.json({ jobs: [] });
     
-    const latestDep = deploymentsSnapshot.docs[0].data();
+    // Sort in memory to avoid requiring a Firestore composite index
+    const deployments = deploymentsSnapshot.docs.map(doc => doc.data());
+    deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const latestDep = deployments[0];
     
     // We fetch all workflow runs for the repo
     const runsRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {

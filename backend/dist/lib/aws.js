@@ -141,7 +141,19 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
     await ecsClient.send(new client_ecs_1.CreateClusterCommand({ clusterName }));
     // 2. Get Execution Role
     const executionRoleArn = await getOrCreateEcsExecutionRole();
-    // 3. Register Task Definition
+    // 3. Ensure CloudWatch Log Group exists
+    const { CloudWatchLogsClient, CreateLogGroupCommand } = require("@aws-sdk/client-cloudwatch-logs");
+    const cwClient = new CloudWatchLogsClient({ region });
+    const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+    try {
+        await cwClient.send(new CreateLogGroupCommand({ logGroupName }));
+    }
+    catch (err) {
+        if (err.name !== "ResourceAlreadyExistsException") {
+            console.warn("Log group creation warning:", err.message);
+        }
+    }
+    // 4. Register Task Definition
     const environment = envVars ? Object.entries(envVars).map(([name, value]) => ({ name, value })) : [];
     const taskDefRes = await ecsClient.send(new client_ecs_1.RegisterTaskDefinitionCommand({
         family: familyName,
@@ -155,7 +167,15 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
                 image: imageUri,
                 portMappings: [{ containerPort: parseInt(port), hostPort: parseInt(port) }],
                 environment: environment,
-                essential: true
+                essential: true,
+                logConfiguration: {
+                    logDriver: "awslogs",
+                    options: {
+                        "awslogs-group": logGroupName,
+                        "awslogs-region": region,
+                        "awslogs-stream-prefix": "ecs"
+                    }
+                }
             }]
     }));
     const taskDefArn = taskDefRes.taskDefinition?.taskDefinitionArn;
@@ -173,6 +193,7 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
         throw new Error("ALB not found");
     const listRes = await elbClient.send(new client_elastic_load_balancing_v2_1.DescribeListenersCommand({ LoadBalancerArn: albArn }));
     const httpsListenerArn = listRes.Listeners?.find(l => l.Port === 443)?.ListenerArn;
+    const httpListenerArn = listRes.Listeners?.find(l => l.Port === 80)?.ListenerArn;
     if (!httpsListenerArn)
         throw new Error("HTTPS Listener not found");
     // Create Target Group for this project
@@ -213,7 +234,29 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
     }
     catch (ruleErr) {
         // If priority is taken or rule exists, ignore for now as it routes to the correct TG
-        console.log("Rule might already exist, proceeding...");
+        console.log("HTTPS Rule might already exist, proceeding...");
+    }
+    // Create HTTP to HTTPS Redirect Rule
+    if (httpListenerArn) {
+        try {
+            const httpPriority = Math.floor(Math.random() * 49999) + 1;
+            await elbClient.send(new client_elastic_load_balancing_v2_1.CreateRuleCommand({
+                ListenerArn: httpListenerArn,
+                Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
+                Priority: httpPriority,
+                Actions: [{
+                        Type: "redirect",
+                        RedirectConfig: {
+                            Protocol: "HTTPS",
+                            Port: "443",
+                            StatusCode: "HTTP_301"
+                        }
+                    }]
+            }));
+        }
+        catch (httpRuleErr) {
+            console.log("HTTP Redirect Rule might already exist, proceeding...");
+        }
     }
     // 6. Create or Recreate Service
     const createServiceInput = {
@@ -239,19 +282,30 @@ async function deployToECS(projectName, imageUri, envVars, port = "3000") {
         await ecsClient.send(new client_ecs_1.CreateServiceCommand(createServiceInput));
     }
     catch (err) {
-        if (err.name === "InvalidParameterException" && err.message.includes("Creation of service was not idempotent")) {
-            // AWS ECS does NOT allow adding a Load Balancer to an existing service that didn't have one!
-            // We must delete the old service and recreate it.
-            const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
-            console.log("Service exists but needs Load Balancer attachment. Recreating service...");
-            await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
-            // Wait a moment for deletion to propagate
-            await new Promise(r => setTimeout(r, 5000));
-            // Create it again with the Load Balancer!
-            await ecsClient.send(new client_ecs_1.CreateServiceCommand(createServiceInput));
+        console.log(`CreateService failed (${err.name}), attempting UpdateService...`);
+        const { UpdateServiceCommand } = require("@aws-sdk/client-ecs");
+        try {
+            await ecsClient.send(new UpdateServiceCommand({
+                cluster: clusterName,
+                service: serviceName,
+                taskDefinition: taskDefArn,
+                desiredCount: 1,
+                forceNewDeployment: true // This forces a rolling update!
+            }));
+            console.log("Service updated successfully with new deployment!");
         }
-        else {
-            throw err;
+        catch (updateErr) {
+            if (updateErr.name === "InvalidParameterException" || err.message.includes("idempotent")) {
+                // Fallback for massive structural changes (like adding LB)
+                const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
+                console.log("Service update failed, recreating service...");
+                await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
+                await new Promise(r => setTimeout(r, 5000));
+                await ecsClient.send(new client_ecs_1.CreateServiceCommand(createServiceInput));
+            }
+            else {
+                throw updateErr;
+            }
         }
     }
     return `https://${sanitizedName}.bravocloud.tech`;
@@ -266,26 +320,33 @@ async function getEcsTaskPublicIp(projectName) {
         const region = process.env.AWS_REGION || "us-east-1";
         const ecs = new ECSClient({ region });
         const ec2 = new EC2Client({ region });
-        // 1. Get Task ARN
-        const listRes = await ecs.send(new ListTasksCommand({
-            cluster: clusterName,
-            serviceName: serviceName,
-            desiredStatus: "RUNNING"
-        }));
-        if (!listRes.taskArns || listRes.taskArns.length === 0)
-            return null;
-        // 2. Get Task Details to find ENI
-        const descRes = await ecs.send(new DescribeTasksCommand({
-            cluster: clusterName,
-            tasks: [listRes.taskArns[0]]
-        }));
-        const task = descRes.tasks?.[0];
-        if (!task)
-            return null;
-        const eniAttachment = task.attachments?.find((a) => a.type === "ElasticNetworkInterface");
-        if (!eniAttachment)
-            return null;
-        const eniIdDetail = eniAttachment.details?.find((d) => d.name === "networkInterfaceId");
+        let eniIdDetail;
+        // Poll up to 30 times (1 minute) for the task to reach RUNNING state and have an ENI
+        for (let i = 0; i < 30; i++) {
+            const listRes = await ecs.send(new ListTasksCommand({
+                cluster: clusterName,
+                serviceName: serviceName,
+                desiredStatus: "RUNNING"
+            }));
+            if (listRes.taskArns && listRes.taskArns.length > 0) {
+                const descRes = await ecs.send(new DescribeTasksCommand({
+                    cluster: clusterName,
+                    tasks: [listRes.taskArns[0]]
+                }));
+                const task = descRes.tasks?.[0];
+                if (task) {
+                    const eniAttachment = task.attachments?.find((a) => a.type === "ElasticNetworkInterface");
+                    if (eniAttachment) {
+                        eniIdDetail = eniAttachment.details?.find((d) => d.name === "networkInterfaceId");
+                        if (eniIdDetail && eniIdDetail.value) {
+                            break; // Found it!
+                        }
+                    }
+                }
+            }
+            // Wait 2 seconds before checking again
+            await new Promise(r => setTimeout(r, 2000));
+        }
         if (!eniIdDetail || !eniIdDetail.value)
             return null;
         // 3. Get Public IP from ENI

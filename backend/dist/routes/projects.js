@@ -285,7 +285,7 @@ router.get('/:id/deployments', middleware_1.verifyToken, async (req, res) => {
         const depsSnapshot = await firebase_1.db.collection('deployments')
             .where('projectId', '==', projectId)
             .get();
-        let deployments = depsSnapshot.docs.map(d => d.data());
+        let deployments = depsSnapshot.docs.map(d => ({ ...d.data(), projectName: project.name }));
         deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         res.json({ deployments });
     }
@@ -376,6 +376,211 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
     }
     catch (error) {
         console.error('Error redeploying project:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Rollback to a specific deployment
+router.post('/:id/deployments/:deploymentId/rollback', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId, deploymentId } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        const targetDeploymentRef = firebase_1.db.collection('deployments').doc(deploymentId);
+        const targetDeploymentDoc = await targetDeploymentRef.get();
+        if (!targetDeploymentDoc.exists) {
+            return res.status(404).json({ error: 'Deployment not found' });
+        }
+        const targetDeploymentData = targetDeploymentDoc.data();
+        if (targetDeploymentData.projectId !== projectId) {
+            return res.status(400).json({ error: 'Deployment does not belong to this project' });
+        }
+        if (!targetDeploymentData.commitHash || targetDeploymentData.commitHash === 'redeploy-trigger' || targetDeploymentData.commitHash === 'manual') {
+            return res.status(400).json({ error: 'This deployment cannot be rolled back because it lacks a specific image hash.' });
+        }
+        // Create a new deployment record for the rollback
+        const newDeploymentRef = firebase_1.db.collection('deployments').doc();
+        const newDeploymentData = {
+            id: newDeploymentRef.id,
+            projectId: projectData.id,
+            status: 'QUEUED',
+            commitHash: targetDeploymentData.commitHash, // Reuse the hash
+            commitMessage: `Rollback to ${targetDeploymentData.commitHash.substring(0, 7)}`,
+            createdAt: new Date().toISOString()
+        };
+        await newDeploymentRef.set(newDeploymentData);
+        res.json({ message: 'Rollback initiated successfully', deployment: newDeploymentData });
+        // Perform rollback asynchronously
+        (async () => {
+            try {
+                await newDeploymentRef.update({ status: 'BUILDING' });
+                const { getAwsAccountId, deployToECS, getEcsTaskPublicIp } = require('../lib/aws');
+                const ecrRepoName = `bravocloud-${projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+                const region = process.env.AWS_REGION || "us-east-1";
+                const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
+                // Pass the exact commitHash instead of 'latest'
+                const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:${targetDeploymentData.commitHash}`;
+                const envs = projectData.envVars ? projectData.envVars : undefined;
+                const ecsUrl = await deployToECS(projectData.name, imageUri, envs);
+                // Wait briefly for the new task to stabilize, then get its IP
+                await new Promise(r => setTimeout(r, 10000));
+                const taskIp = await getEcsTaskPublicIp(projectData.name);
+                // Update project
+                const updatePayload = {};
+                if (ecsUrl) {
+                    updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
+                }
+                if (taskIp) {
+                    updatePayload.taskIp = taskIp;
+                }
+                if (Object.keys(updatePayload).length > 0) {
+                    await projectRef.update(updatePayload);
+                }
+                // Update deployment status
+                await newDeploymentRef.update({ status: 'SUCCESS' });
+            }
+            catch (err) {
+                console.error('Rollback failed:', err);
+                await newDeploymentRef.update({ status: 'FAILED' });
+            }
+        })();
+    }
+    catch (error) {
+        console.error('Error rolling back project:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Fetch GitHub Build Logs
+router.get('/:id/logs/build', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        const userDoc = await firebase_1.db.collection('users').doc(userId).get();
+        const user = userDoc.data();
+        if (!user?.githubToken)
+            return res.status(400).json({ error: 'GitHub token not found' });
+        if (!projectData.repoUrl)
+            return res.status(400).json({ error: 'Repo URL not found on project' });
+        const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+        const repoOwner = urlParts[0];
+        const repoName = urlParts[1];
+        // Get latest deployments
+        const deploymentsSnapshot = await firebase_1.db.collection('deployments')
+            .where('projectId', '==', projectId)
+            .orderBy('createdAt', 'desc')
+            .limit(1)
+            .get();
+        if (deploymentsSnapshot.empty)
+            return res.json({ jobs: [] });
+        const latestDep = deploymentsSnapshot.docs[0].data();
+        // We fetch all workflow runs for the repo
+        const runsRes = await (0, node_fetch_1.default)(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
+            headers: {
+                'Authorization': `token ${user.githubToken}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        if (!runsRes.ok)
+            return res.status(runsRes.status).json({ error: 'Failed to fetch runs' });
+        const runsData = await runsRes.json();
+        let targetRun = runsData.workflow_runs?.[0];
+        // Try to find run by commit hash
+        if (latestDep.commitHash && latestDep.commitHash !== 'redeploy-trigger' && latestDep.commitHash !== 'manual') {
+            const match = runsData.workflow_runs?.find((r) => r.head_sha === latestDep.commitHash);
+            if (match)
+                targetRun = match;
+        }
+        if (!targetRun)
+            return res.json({ jobs: [] });
+        // Fetch jobs for that run
+        const jobsRes = await (0, node_fetch_1.default)(targetRun.jobs_url, {
+            headers: {
+                'Authorization': `token ${user.githubToken}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        if (!jobsRes.ok)
+            return res.status(jobsRes.status).json({ error: 'Failed to fetch jobs' });
+        const jobsData = await jobsRes.json();
+        const jobs = jobsData.jobs || [];
+        let rawLog = "";
+        if (jobs.length > 0) {
+            const jobId = jobs[0].id;
+            try {
+                const logRes = await (0, node_fetch_1.default)(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/jobs/${jobId}/logs`, {
+                    headers: {
+                        'Authorization': `token ${user.githubToken}`
+                    }
+                });
+                if (logRes.ok) {
+                    rawLog = await logRes.text();
+                }
+            }
+            catch (e) {
+                console.error("Error fetching raw job logs", e);
+            }
+        }
+        res.json({ jobs, rawLog });
+    }
+    catch (error) {
+        console.error('Error fetching build logs:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Fetch AWS Runtime Logs
+router.get('/:id/logs/runtime', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        const sanitizedName = projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+        const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
+        const region = process.env.AWS_REGION || "us-east-1";
+        const { CloudWatchLogsClient, FilterLogEventsCommand } = require("@aws-sdk/client-cloudwatch-logs");
+        const cwClient = new CloudWatchLogsClient({ region });
+        // Get logs from last 1 hour
+        const startTime = Date.now() - (60 * 60 * 1000);
+        try {
+            const logRes = await cwClient.send(new FilterLogEventsCommand({
+                logGroupName,
+                startTime,
+                limit: 100
+            }));
+            const events = logRes.events?.map((e) => ({
+                timestamp: e.timestamp,
+                message: e.message
+            })) || [];
+            res.json({ logs: events });
+        }
+        catch (cwErr) {
+            if (cwErr.name === 'ResourceNotFoundException') {
+                return res.json({ logs: [{ timestamp: Date.now(), message: 'Waiting for container to start and emit logs...' }] });
+            }
+            throw cwErr;
+        }
+    }
+    catch (error) {
+        console.error('Error fetching runtime logs:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
