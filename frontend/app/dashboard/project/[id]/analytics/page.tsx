@@ -173,7 +173,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
             
             <div className="relative z-10 flex items-center gap-2 bg-[#18181b] border border-[#27272a] rounded-lg p-1 w-full md:w-auto">
               <div className="px-4 py-2 text-sm font-mono text-[#a1a1aa] overflow-x-auto whitespace-nowrap max-w-[300px] md:max-w-[400px]">
-                &lt;script src="{process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/analytics/script.js" data-bravocloud-id="{projectId}"&gt;&lt;/script&gt;
+                {`<script src="${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/analytics/script.js" data-bravocloud-id="${projectId}"></script>`}
               </div>
               <button 
                 onClick={copySnippet}
@@ -223,7 +223,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <span className="text-[#a1a1aa]">{page.count} views</span>
                       </div>
                       <div className="w-full bg-[#18181b] rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: \`\${calculatePercentage(page.count, totalPageCount)}%\` }}></div>
+                        <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${calculatePercentage(page.count, totalPageCount)}%` }}></div>
                       </div>
                     </div>
                   ))}
@@ -247,7 +247,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <span className="text-[#a1a1aa]">{country.count} visitors</span>
                       </div>
                       <div className="w-full bg-[#18181b] rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: \`\${calculatePercentage(country.count, totalCountryCount)}%\` }}></div>
+                        <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${calculatePercentage(country.count, totalCountryCount)}%` }}></div>
                       </div>
                     </div>
                   ))}
@@ -271,7 +271,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <span className="text-[#a1a1aa]">{device.count} visitors</span>
                       </div>
                       <div className="w-full bg-[#18181b] rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: \`\${calculatePercentage(device.count, totalDeviceCount)}%\` }}></div>
+                        <div className="bg-purple-500 h-1.5 rounded-full" style={{ width: `${calculatePercentage(device.count, totalDeviceCount)}%` }}></div>
                       </div>
                     </div>
                   ))}
@@ -295,7 +295,7 @@ export default function AnalyticsPage({ params }: { params: Promise<{ id: string
                         <span className="text-[#a1a1aa]">{os.count} visitors</span>
                       </div>
                       <div className="w-full bg-[#18181b] rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: \`\${calculatePercentage(os.count, totalOSCount)}%\` }}></div>
+                        <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${calculatePercentage(os.count, totalOSCount)}%` }}></div>
                       </div>
                     </div>
                   ))}

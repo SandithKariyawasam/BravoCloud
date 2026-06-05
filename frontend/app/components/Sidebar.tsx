@@ -105,18 +105,20 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               }
             }} q={q} category="Main" />
             {isProjectView && (
-              <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
-                handleSelect("main", setActiveItem, "Logs");
-                if (projectId) {
-                  router.push(`/dashboard/project/${projectId}/logs`);
-                }
-              }} q={q} category="Main" />
-              <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
-                handleSelect("main", setActiveItem, "Analytics");
-                if (projectId) {
-                  router.push(`/dashboard/project/${projectId}/analytics`);
-                }
-              }} q={q} category="Main" />
+              <>
+                <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
+                  handleSelect("main", setActiveItem, "Logs");
+                  if (projectId) {
+                    router.push(`/dashboard/project/${projectId}/logs`);
+                  }
+                }} q={q} category="Main" />
+                <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
+                  handleSelect("main", setActiveItem, "Analytics");
+                  if (projectId) {
+                    router.push(`/dashboard/project/${projectId}/analytics`);
+                  }
+                }} q={q} category="Main" />
+              </>
             )}
             <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
             <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
