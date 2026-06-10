@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { 
-  LayoutGrid, Box, List, Activity, Gauge, Eye, Shield, Globe, 
-  Variable, Globe2, Plug, Database, ToggleLeft, Cpu, Network, Maximize, 
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutGrid, Box, List, Activity, Gauge, Eye, Shield, Globe,
+  Variable, Globe2, Plug, Database, ToggleLeft, Cpu, Network, Maximize,
   GitMerge, PieChart, LifeBuoy, Settings, ChevronRight, ChevronLeft,
   BookOpen, AlertTriangle, RefreshCw, Zap, Image as ImageIcon, ExternalLink,
   Sparkles, Circle, ListTodo, Wrench, ListOrdered, KeyRound, UserRound,
@@ -32,8 +33,55 @@ const BYOKIcon = () => (
 );
 
 export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLogout }: SidebarProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isProjectView = pathname?.includes('/dashboard/project/');
+  const projectId = isProjectView ? pathname.split('/')[3] : null;
+  const isDeploymentsPage = pathname?.endsWith('/deployments');
+  const isLogsPage = pathname?.endsWith('/logs');
+  const isAnalyticsPage = pathname?.endsWith('/analytics');
+  const isSpeedInsightsPage = pathname?.endsWith('/speed-insights');
+  const isEnvPage = pathname?.endsWith('/env');
+  const isDomainsPage = pathname?.endsWith('/domains');
+  const isStoragePage = pathname?.endsWith('/storage');
+  
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">("main");
-  const [activeItem, setActiveItem] = useState<string>("Projects");
+  const [isMounted, setIsMounted] = useState(false);
+  const [activeItem, setActiveItem] = useState<string>(() => {
+    if (isDeploymentsPage) return "Deployments";
+    if (isLogsPage) return "Logs";
+    if (isAnalyticsPage) return "Analytics";
+    if (isSpeedInsightsPage) return "Speed Insights";
+    if (isEnvPage) return "Environment Variables";
+    if (isDomainsPage) return "Domains";
+    if (isStoragePage) return "Storage";
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage)) {
+      return isProjectView ? "Overview" : "Projects";
+    }
+    return "Projects";
+  });
+
+  // Sync active item with URL
+  useEffect(() => {
+    setIsMounted(true);
+    if (isDeploymentsPage) {
+      setActiveItem("Deployments");
+    } else if (isLogsPage) {
+      setActiveItem("Logs");
+    } else if (isAnalyticsPage) {
+      setActiveItem("Analytics");
+    } else if (isSpeedInsightsPage) {
+      setActiveItem("Speed Insights");
+    } else if (isEnvPage) {
+      setActiveItem("Environment Variables");
+    } else if (isDomainsPage) {
+      setActiveItem("Domains");
+    } else if (isStoragePage) {
+      setActiveItem("Storage");
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage)) {
+      setActiveItem(isProjectView ? "Overview" : "Projects");
+    }
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isProjectView]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -52,9 +100,9 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       {/* Search (Permanently Shown) */}
       <div className="p-3 bg-black z-10 border-b border-transparent">
         <div className="flex items-center bg-[#18181b] border border-[#27272a] rounded-md px-3 py-1.5 transition-all focus-within:border-[#3f3f46] focus-within:bg-[#18181b] group">
-          <input 
-            type="text" 
-            placeholder="Find..." 
+          <input
+            type="text"
+            placeholder="Find..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-transparent text-sm text-[#a1a1aa] placeholder-[#71717a] outline-none flex-1 font-medium"
@@ -65,30 +113,84 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       <div className="flex-1 overflow-y-auto custom-sidebar-scrollbar pb-4">
         {/* MAIN VIEW */}
         {(q || view === "main") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "mt-1 animate-slide-in"}`}>
-            <SidebarItem icon={<LayoutGrid size={16} />} label="Projects" active={!q && view === "main" && activeItem === "Projects"} onClick={() => handleSelect("main", setActiveItem, "Projects")} q={q} category="Main" />
-            <SidebarItem icon={<Box size={16} />} label="Deployments" active={!q && view === "main" && activeItem === "Deployments"} onClick={() => handleSelect("main", setActiveItem, "Deployments")} q={q} category="Main" />
-            <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => handleSelect("main", setActiveItem, "Logs")} q={q} category="Main" />
-            <SidebarItem icon={<Activity size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => handleSelect("main", setActiveItem, "Analytics")} q={q} category="Main" />
-            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => handleSelect("main", setActiveItem, "Speed Insights")} q={q} category="Main" />
-            <SidebarItem icon={<Eye size={16} />} label="Observability" hasArrow onClick={() => handleSelect("observability")} q={q} category="Main" />
-            <SidebarItem icon={<Shield size={16} />} label="Firewall" active={!q && view === "main" && activeItem === "Firewall"} onClick={() => handleSelect("main", setActiveItem, "Firewall")} q={q} category="Main" />
-            <SidebarItem icon={<Globe size={16} />} label="CDN" active={!q && view === "main" && activeItem === "CDN"} onClick={() => handleSelect("main", setActiveItem, "CDN")} q={q} category="Main" />
-            
+          <nav className={`px-2 space-y-0.5 ${!q && "mt-1"}`}>
+            <SidebarItem icon={<LayoutGrid size={16} />} label={isProjectView ? "Overview" : "Projects"} active={!q && view === "main" && (activeItem === "Projects" || activeItem === "Overview")} onClick={() => {
+              handleSelect("main", setActiveItem, isProjectView ? "Overview" : "Projects");
+              if (isProjectView && projectId) {
+                router.push(`/dashboard/project/${projectId}`);
+              } else {
+                router.push('/dashboard');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Box size={16} />} label="Deployments" active={!q && view === "main" && activeItem === "Deployments"} onClick={() => {
+              handleSelect("main", setActiveItem, "Deployments");
+              if (isProjectView && projectId) {
+                router.push(`/dashboard/project/${projectId}/deployments`);
+              } else {
+                router.push('/dashboard/deployments');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<List size={16} />} label="Logs" active={!q && view === "main" && activeItem === "Logs"} onClick={() => {
+              handleSelect("main", setActiveItem, "Logs");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/logs`);
+              } else {
+                router.push('/dashboard/logs');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<PieChart size={16} />} label="Analytics" active={!q && view === "main" && activeItem === "Analytics"} onClick={() => {
+              handleSelect("main", setActiveItem, "Analytics");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/analytics`);
+              } else {
+                router.push('/dashboard/analytics');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Gauge size={16} />} label="Speed Insights" active={!q && view === "main" && activeItem === "Speed Insights"} onClick={() => {
+              handleSelect("main", setActiveItem, "Speed Insights");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/speed-insights`);
+              } else {
+                router.push('/dashboard/speed-insights');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Eye size={16} />} label="Observability" badge="Soon" q={q} category="Main" />
+            <SidebarItem icon={<Shield size={16} />} label="Firewall" badge="Soon" q={q} category="Main" />
+            <SidebarItem icon={<Globe size={16} />} label="CDN" badge="Soon" q={q} category="Main" />
+
             {!q && <div className="h-px bg-[#27272a]/50 my-3 mx-2" />}
-            
-            <SidebarItem icon={<Variable size={16} />} label="Environment Variables" badge="12" active={!q && view === "main" && activeItem === "Environment Variables"} onClick={() => handleSelect("main", setActiveItem, "Environment Variables")} q={q} category="Main" />
-            <SidebarItem icon={<Globe2 size={16} />} label="Domains" active={!q && view === "main" && activeItem === "Domains"} onClick={() => handleSelect("main", setActiveItem, "Domains")} q={q} category="Main" />
+
+            <SidebarItem icon={<Variable size={16} />} label="Environment Variables" active={!q && view === "main" && activeItem === "Environment Variables"} onClick={() => {
+              handleSelect("main", setActiveItem, "Environment Variables");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/env`);
+              } else {
+                router.push('/dashboard/env');
+              }
+            }} q={q} category="Main" />
+            <SidebarItem icon={<Globe2 size={16} />} label="Domains" active={!q && view === "main" && activeItem === "Domains"} onClick={() => {
+              handleSelect("main", setActiveItem, "Domains");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/domains`);
+              } else {
+                router.push('/dashboard/domains');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Plug size={16} />} label="Integrations" active={!q && view === "main" && activeItem === "Integrations"} onClick={() => handleSelect("main", setActiveItem, "Integrations")} q={q} category="Main" />
-            <SidebarItem icon={<Database size={16} />} label="Storage" active={!q && view === "main" && activeItem === "Storage"} onClick={() => handleSelect("main", setActiveItem, "Storage")} q={q} category="Main" />
-            <SidebarItem icon={<ToggleLeft size={16} />} label="Flags" active={!q && view === "main" && activeItem === "Flags"} onClick={() => handleSelect("main", setActiveItem, "Flags")} q={q} category="Main" />
+            <SidebarItem icon={<Database size={16} />} label="Storage" active={!q && view === "main" && activeItem === "Storage"} onClick={() => {
+              handleSelect("main", setActiveItem, "Storage");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/storage`);
+              } else {
+                router.push('/dashboard/storage');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Cpu size={16} />} label="Agent" hasArrow active={!q && view === "main" && activeItem === "Agent"} onClick={() => handleSelect("main", setActiveItem, "Agent")} q={q} category="Main" />
             <SidebarItem icon={<Network size={16} />} label="AI Gateway" hasArrow onClick={() => handleSelect("ai-gateway")} q={q} category="Main" />
-            <SidebarItem icon={<Maximize size={16} />} label="Sandboxes" active={!q && view === "main" && activeItem === "Sandboxes"} onClick={() => handleSelect("main", setActiveItem, "Sandboxes")} q={q} category="Main" />
             <SidebarItem icon={<GitMerge size={16} />} label="Workflows" active={!q && view === "main" && activeItem === "Workflows"} onClick={() => handleSelect("main", setActiveItem, "Workflows")} q={q} category="Main" />
-            
+
             {!q && <div className="h-px bg-[#27272a]/50 my-3 mx-2" />}
-            
+
             <SidebarItem icon={<PieChart size={16} />} label="Usage" active={!q && view === "main" && activeItem === "Usage"} onClick={() => handleSelect("main", setActiveItem, "Usage")} q={q} category="Main" />
             <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
             <SidebarItem icon={<Settings size={16} />} label="Settings" hasArrow onClick={() => handleSelect("settings")} q={q} category="Main" />
@@ -97,7 +199,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* OBSERVABILITY VIEW */}
         {(q || view === "observability") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -113,7 +215,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
             <SidebarItem icon={<AlertTriangle size={16} />} label="Alerts" active={!q && view === "observability" && activeObsItem === "Alerts"} onClick={() => handleSelect("observability", setActiveObsItem, "Alerts")} q={q} category="Observability" />
 
             {!q && <div className="px-3 pt-4 pb-1 text-[10px] font-bold text-[#71717a] tracking-widest uppercase">Compute</div>}
-            
+
             <SidebarItem icon={<div className="w-4 h-4 rounded border border-current flex items-center justify-center font-mono text-[10px] leading-none font-bold opacity-80">f</div>} label="Functions" active={!q && view === "observability" && activeObsItem === "Functions"} onClick={() => handleSelect("observability", setActiveObsItem, "Functions")} q={q} category="Observability" />
             <SidebarItem icon={<Globe size={16} />} label="External APIs" active={!q && view === "observability" && activeObsItem === "External APIs"} onClick={() => handleSelect("observability", setActiveObsItem, "External APIs")} q={q} category="Observability" />
             <SidebarItem icon={<div className="w-4 h-4 rounded border border-current flex items-center justify-center font-mono text-[10px] leading-none font-bold opacity-80">m</div>} label="Middleware" active={!q && view === "observability" && activeObsItem === "Middleware"} onClick={() => handleSelect("observability", setActiveObsItem, "Middleware")} q={q} category="Observability" />
@@ -137,7 +239,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* AI GATEWAY VIEW */}
         {(q || view === "ai-gateway") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -162,7 +264,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
 
         {/* SETTINGS VIEW */}
         {(q || view === "settings") && (
-          <nav className={`px-2 space-y-0.5 ${!q && "animate-slide-in"}`}>
+          <nav className="px-2 space-y-0.5">
             {!q && (
               <div className="flex items-center px-2 py-2 text-white border-b border-[#27272a]/40 mb-2 relative min-h-[45px]">
                 <button onClick={() => setView("main")} className="absolute left-1 p-1 hover:bg-[#18181b] rounded-md transition-all text-[#a1a1aa] hover:text-white">
@@ -173,16 +275,16 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
             )}
 
             {[
-              "General", "Billing", "Build and Deployment", "Invoices", "Members", 
-              "Access Groups", "Agent", "Drains", "Alerts", "Webhooks", 
-              "Security & Privacy", "Deployment Protection", "Microfrontends", 
+              "General", "Billing", "Build and Deployment", "Invoices", "Members",
+              "Access Groups", "Agent", "Drains", "Alerts", "Webhooks",
+              "Security & Privacy", "Deployment Protection", "Microfrontends",
               "Networking", "Activity", "My Notifications", "Apps"
             ].map(item => (
-              <SidebarItem 
+              <SidebarItem
                 key={item}
-                label={item} 
-                active={!q && view === "settings" && activeSettingsItem === item} 
-                onClick={() => handleSelect("settings", setActiveSettingsItem, item)} 
+                label={item}
+                active={!q && view === "settings" && activeSettingsItem === item}
+                onClick={() => handleSelect("settings", setActiveSettingsItem, item)}
                 q={q}
                 category="Settings"
               />
@@ -195,8 +297,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       {user && (
         <div className="p-4 border-t border-[#27272a]/40 bg-black relative">
           {isDropdownOpen && setIsDropdownOpen && onLogout && (
-            <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden animate-slide-in">
-              <button 
+            <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden">
+              <button
                 onClick={onLogout}
                 className="w-full text-left px-4 py-3 text-sm text-[#a1a1aa] hover:bg-[#27272a] hover:text-white transition-colors flex items-center gap-2 font-medium"
               >
@@ -207,15 +309,15 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               </button>
             </div>
           )}
-          
-          <div 
+
+          <div
             onClick={() => setIsDropdownOpen && setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center gap-3 px-3 py-2 bg-[#18181b]/50 border border-[#27272a] rounded-xl hover:bg-[#27272a] transition-colors cursor-pointer group"
           >
             <div className="w-9 h-9 rounded-full overflow-hidden border border-[#3f3f46] group-hover:border-white transition-colors flex-shrink-0">
-              <img 
-                src={user.avatarUrl || "https://github.com/ghost.png"} 
-                alt={user.username} 
+              <img
+                src={user.avatarUrl || "https://github.com/ghost.png"}
+                alt={user.username}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -232,19 +334,19 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   );
 }
 
-function SidebarItem({ 
-  icon, 
-  label, 
-  active = false, 
+function SidebarItem({
+  icon,
+  label,
+  active = false,
   hasArrow = false,
   hasExternal = false,
   badge,
   onClick,
   q,
   category
-}: { 
-  icon?: React.ReactNode; 
-  label: string; 
+}: {
+  icon?: React.ReactNode;
+  label: string;
   active?: boolean;
   hasArrow?: boolean;
   hasExternal?: boolean;
@@ -258,17 +360,16 @@ function SidebarItem({
   }
 
   return (
-    <a 
+    <a
       onClick={(e) => {
         e.preventDefault();
         if (onClick) onClick();
       }}
       href="#"
-      className={`group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-200 cursor-pointer ${
-        active 
-          ? 'bg-[#27272a] text-white font-medium' 
-          : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-white border border-transparent'
-      }`}
+      className={`group flex items-center justify-between px-3 py-2 rounded-md text-sm transition-all duration-200 cursor-pointer outline-none border ${active
+          ? 'bg-[#27272a] text-white font-medium border-[#27272a]'
+          : 'text-[#a1a1aa] hover:bg-[#18181b] hover:text-white border-transparent'
+        }`}
     >
       <div className="flex items-center gap-3">
         {icon && (
@@ -278,17 +379,16 @@ function SidebarItem({
         )}
         <span className="font-medium">{label}</span>
       </div>
-      
+
       <div className="flex items-center gap-2">
         {category && q && (
           <span className="text-[9px] font-medium text-[#71717a] bg-[#18181b] px-1.5 py-0.5 rounded border border-[#27272a] uppercase tracking-wider">{category}</span>
         )}
         {badge && (
-          <span className={`flex items-center justify-center text-[10px] font-semibold px-2 h-5 rounded-full ${
-            badge === "Beta" 
-              ? 'bg-[#27272a] text-white border border-[#3f3f46] text-[9px] uppercase tracking-wider' 
+          <span className={`flex items-center justify-center text-[10px] font-semibold px-2 h-5 rounded-full ${badge === "Beta"
+              ? 'bg-[#27272a] text-white border border-[#3f3f46] text-[9px] uppercase tracking-wider'
               : 'bg-[#27272a] text-white border border-[#3f3f46]'
-          }`}>
+            }`}>
             {badge}
           </span>
         )}

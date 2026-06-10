@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import BackgroundAnimation from "../components/BackgroundAnimation";
 
@@ -26,6 +27,7 @@ interface UserProfile {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,21 +35,22 @@ export default function Dashboard() {
   const [dashboardView, setDashboardView] = useState<"projects" | "import">("projects");
   const [deployedProjects, setDeployedProjects] = useState<any[]>([]); // Mock state for now
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
+  const [redeployingProjectId, setRedeployingProjectId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredRepos = repos.filter(repo => 
-    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredRepos = repos.filter(repo =>
+    repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (repo.description && repo.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   useEffect(() => {
     let token = localStorage.getItem("bravocloud_token");
-    
+
     // Check if token is in URL (redirect from OAuth)
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get("token");
-    
+
     if (urlToken) {
       token = urlToken;
       localStorage.setItem("bravocloud_token", urlToken);
@@ -59,15 +62,36 @@ export default function Dashboard() {
       return;
     }
 
-    fetchDashboardData(token);
+    let hasCache = false;
+    // Load from cache instantly
+    const cachedData = localStorage.getItem("bravocloud_dashboard_cache");
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        if (parsed.repos || parsed.projects) {
+          if (parsed.repos) setRepos(parsed.repos);
+          if (parsed.user) setUser(parsed.user);
+          if (parsed.projects) setDeployedProjects(parsed.projects);
+          setLoading(false); // Instantly show UI
+          hasCache = true;
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
+    fetchDashboardData(token, hasCache);
   }, []);
 
-  const fetchDashboardData = (token: string) => {
-    setLoading(true);
-    
+  const fetchDashboardData = (token: string, hasCache: boolean = false) => {
+    // Only set loading to true if we don't have cached data showing already
+    if (!hasCache) {
+      setLoading(true);
+    }
+
     const headers = { "Authorization": `Bearer ${token}` };
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    
+
     Promise.all([
       fetch(`${apiUrl}/api/github/repos`, { headers }),
       fetch(`${apiUrl}/auth/me`, { headers }),
@@ -78,19 +102,30 @@ export default function Dashboard() {
           const errorText = await userRes.text();
           throw new Error(`Auth Error: ${userRes.status} - ${errorText}`);
         }
-        
+
         const reposData = await reposRes.json();
         const userData = await userRes.json();
-        
+
         let projectsData = { projects: [] };
         if (projectsRes.ok) {
           projectsData = await projectsRes.json();
         }
 
-        setRepos(reposData.repos || []);
-        setUser(userData.user);
-        setDeployedProjects(projectsData.projects || []);
+        const reposList = reposData.repos || [];
+        const userObj = userData.user;
+        const projectsList = projectsData.projects || [];
+
+        setRepos(reposList);
+        setUser(userObj);
+        setDeployedProjects(projectsList);
         setLoading(false);
+        
+        // Save to cache for next instant load
+        localStorage.setItem("bravocloud_dashboard_cache", JSON.stringify({
+          repos: reposList,
+          user: userObj,
+          projects: projectsList
+        }));
       })
       .catch((err) => {
         console.error(err);
@@ -98,6 +133,31 @@ export default function Dashboard() {
         // Temporarily disabling the redirect so you can inspect the console!
         // window.location.href = "/";
       });
+  };
+
+  const handleRedeploy = async (projectId: string) => {
+    setRedeployingProjectId(projectId);
+    try {
+      const token = localStorage.getItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/redeploy`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to redeploy");
+      }
+
+      // Refresh dashboard data to show QUEUED status
+      if (token) fetchDashboardData(token);
+    } catch (error: any) {
+      alert("Redeploy failed: " + error.message);
+    } finally {
+      setRedeployingProjectId(null);
+    }
   };
 
   const handleLogout = async () => {
@@ -168,25 +228,42 @@ export default function Dashboard() {
                       const isBuilding = status === 'QUEUED' || status === 'BUILDING';
                       const isSuccess = status === 'SUCCESS' || status === 'DEPLOYED';
                       const isFailed = status === 'FAILED';
-                      
+
                       return (
-                        <div key={project.id} className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col">
+                        <div
+                          key={project.id}
+                          onClick={() => router.push(`/dashboard/project/${project.id}`)}
+                          className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col cursor-pointer"
+                        >
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
-                              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#27272a] to-[#18181b] border border-[#3f3f46] flex items-center justify-center flex-shrink-0">
-                                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                              <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative">
+                                {project.subdomain && (
+                                  <img
+                                    src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`)}`}
+                                    className="w-full h-full object-cover z-10"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                    onLoad={(e) => {
+                                      const svg = e.currentTarget.parentElement?.querySelector('svg');
+                                      if (svg) svg.style.display = 'none';
+                                    }}
+                                  />
+                                )}
+                                <svg className="w-5 h-5 text-white absolute z-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
                               </div>
                               <h3 className="font-semibold text-lg truncate text-white">{project.name}</h3>
                             </div>
                             <span className={`text-[11px] px-2.5 py-1 rounded-full font-bold tracking-wider uppercase flex items-center gap-1.5
-                              ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                                isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                                'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
+                              ${isSuccess ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                                isFailed ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                                  'bg-blue-500/10 text-blue-400 border border-blue-500/20 animate-pulse'}`}>
                               {isBuilding && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" />}
                               {status}
                             </span>
                           </div>
-                          
+
                           <div className="flex flex-col gap-2 mb-6">
                             <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
                               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" /></svg>
@@ -202,9 +279,40 @@ export default function Dashboard() {
                             <span className="text-xs text-[#71717a]">
                               Created {new Date(project.createdAt).toLocaleDateString()}
                             </span>
-                            <a href={project.subdomain ? `https://${project.subdomain}` : '#'} target="_blank" rel="noreferrer" className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm">
-                              Visit Site
-                            </a>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRedeploy(project.id);
+                                }}
+                                disabled={redeployingProjectId === project.id}
+                                className="text-xs font-semibold px-3 py-1.5 bg-[#27272a] text-white rounded-lg hover:bg-[#3f3f46] transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {redeployingProjectId === project.id ? (
+                                  <>
+                                    <svg className="animate-spin h-3 w-3 text-white" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Redeploying...
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                    Redeploy
+                                  </>
+                                )}
+                              </button>
+                              <a
+                                href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs font-semibold px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
+                              >
+                                Visit Site
+                              </a>
+                            </div>
                           </div>
                         </div>
                       );
@@ -230,7 +338,7 @@ export default function Dashboard() {
                       <p className="text-[#a1a1aa] text-lg">Select a repository from your connected GitHub account to deploy.</p>
                     </div>
                   </div>
-                  
+
                   {/* Search Bar */}
                   <div className="relative w-full md:w-72">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -257,41 +365,41 @@ export default function Dashboard() {
                   <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                     {filteredRepos.length > 0 ? (
                       filteredRepos.map((repo) => (
-                      <div
-                        key={repo.id}
-                        className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <svg className="w-5 h-5 text-[#71717a] group-hover:text-white flex-shrink-0 transition-colors" fill="currentColor" viewBox="0 0 24 24">
-                              <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v16a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2H4zm8 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 8a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                            </svg>
-                            <h3 className="font-semibold text-lg truncate text-[#e4e4e7] group-hover:text-white transition-colors" title={repo.fullName}>
-                              {repo.name}
-                            </h3>
-                          </div>
-                          <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${repo.private ? 'bg-black text-[#a1a1aa] border border-[#27272a]' : 'bg-white/10 text-gray-200 border border-white/20'}`}>
-                            {repo.private ? "Private" : "Public"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[#a1a1aa] mb-8 flex-1 line-clamp-2 group-hover:text-[#e4e4e7] transition-colors">
-                          {repo.description || "No description provided for this repository."}
-                        </p>
-                        <div className="flex items-center justify-between mt-auto pt-5 border-t border-[#27272a] group-hover:border-[#3f3f46] transition-colors">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-bold px-2 py-1 bg-[#27272a] text-[#a1a1aa] group-hover:text-white rounded-md uppercase tracking-wider transition-colors">
-                              {repo.language || "Unknown Stack"}
+                        <div
+                          key={repo.id}
+                          className="bg-[#18181b]/60 backdrop-blur-sm border border-[#27272a] rounded-xl p-6 hover:bg-[#18181b] hover:border-white/50 hover:-translate-y-1 hover:shadow-[0_8px_30px_rgba(255,255,255,0.05)] transition-all duration-300 group flex flex-col"
+                        >
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              <svg className="w-5 h-5 text-[#71717a] group-hover:text-white flex-shrink-0 transition-colors" fill="currentColor" viewBox="0 0 24 24">
+                                <path fillRule="evenodd" d="M4 2a2 2 0 00-2 2v16a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2H4zm8 14.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 8a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                              </svg>
+                              <h3 className="font-semibold text-lg truncate text-[#e4e4e7] group-hover:text-white transition-colors" title={repo.fullName}>
+                                {repo.name}
+                              </h3>
+                            </div>
+                            <span className={`text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap ${repo.private ? 'bg-black text-[#a1a1aa] border border-[#27272a]' : 'bg-white/10 text-gray-200 border border-white/20'}`}>
+                              {repo.private ? "Private" : "Public"}
                             </span>
                           </div>
-                          <button 
-                            onClick={() => setSelectedRepo(repo)}
-                            className="px-5 py-2 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-all duration-200"
-                          >
-                            Import
-                          </button>
+                          <p className="text-sm text-[#a1a1aa] mb-8 flex-1 line-clamp-2 group-hover:text-[#e4e4e7] transition-colors">
+                            {repo.description || "No description provided for this repository."}
+                          </p>
+                          <div className="flex items-center justify-between mt-auto pt-5 border-t border-[#27272a] group-hover:border-[#3f3f46] transition-colors">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-bold px-2 py-1 bg-[#27272a] text-[#a1a1aa] group-hover:text-white rounded-md uppercase tracking-wider transition-colors">
+                                {repo.language || "Unknown Stack"}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setSelectedRepo(repo)}
+                              className="px-5 py-2 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 hover:scale-105 hover:shadow-[0_0_15px_rgba(255,255,255,0.3)] transition-all duration-200"
+                            >
+                              Import
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      ))
                     ) : (
                       <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#a1a1aa]">
                         <svg className="w-12 h-12 mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">

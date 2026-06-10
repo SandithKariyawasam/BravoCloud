@@ -13,8 +13,18 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-acm": "^3.1064.0",
     "@aws-sdk/client-apprunner": "^3.1057.0",
+    "@aws-sdk/client-ec2": "^3.1058.0",
     "@aws-sdk/client-ecr": "^3.1057.0",
+    "@aws-sdk/client-ecs": "^3.1058.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1060.0",
+    "@aws-sdk/client-elasticache": "^3.1065.0",
+    "@aws-sdk/client-iam": "^3.1058.0",
+    "@aws-sdk/client-rds": "^3.1065.0",
+    "@aws-sdk/client-route-53": "^3.1060.0",
+    "@aws-sdk/client-s3": "^3.1065.0",
+    "@aws-sdk/client-sts": "^3.1058.0",
     "@google-cloud/connect-firestore": "^3.0.0",
     "@octokit/rest": "^19.0.13",
     "cors": "^2.8.6",
@@ -26,7 +36,8 @@
     "libsodium-wrappers": "^0.8.4",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "ua-parser-js": "^2.0.10"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -37,6 +48,7 @@
     "@types/node": "^25.9.1",
     "@types/passport": "^1.0.17",
     "@types/passport-github2": "^1.2.9",
+    "@types/ua-parser-js": "^0.7.39",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
