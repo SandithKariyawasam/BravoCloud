@@ -102,6 +102,12 @@ export default function GlobalSettingsPage() {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
     
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image is too large. Maximum size is 5MB.");
+      return;
+    }
+    
     setUploadingAvatar(true);
     setProfileMessage("");
     const token = localStorage.getItem("bravocloud_token");
@@ -267,6 +273,7 @@ export default function GlobalSettingsPage() {
                           disabled={uploadingAvatar}
                         />
                       </label>
+                      <span className="text-[10px] text-[#71717a] mt-1 text-center">Max size: 5MB<br/>JPG, PNG, WebP</span>
                     </div>
 
                     <div className="flex-1 grid grid-cols-1 gap-5 w-full">
