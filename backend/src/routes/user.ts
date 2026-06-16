@@ -122,8 +122,10 @@ router.post('/tokens', verifyToken, async (req: any, res: any) => {
     
     if (!name) return res.status(400).json({ error: 'Token name is required' });
 
-    // Generate a secure random token
-    const tokenSecret = `bc_${crypto.randomBytes(32).toString('hex')}`;
+    // Generate a secure random token, embedding the userId for efficient O(1) lookups
+    const secretPart = crypto.randomBytes(24).toString('hex');
+    const tokenSecret = `bc_${userId}_${secretPart}`;
+    
     // In a real app, we would hash tokenSecret before saving, and only store the hash.
     // For BravoCloud V1, we'll store it hashed to demonstrate best practices.
     const tokenHash = crypto.createHash('sha256').update(tokenSecret).digest('hex');

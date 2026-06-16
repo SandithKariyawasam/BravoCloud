@@ -89,11 +89,19 @@ router.post('/token-login', async (req: any, res: any) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token is required' });
 
+    // New format: bc_{userId}_{secret}
+    const parts = token.split('_');
+    if (parts.length !== 3 || parts[0] !== 'bc') {
+      return res.status(400).json({ error: 'Invalid token format' });
+    }
+    const userId = parts[1];
+
     // Hash the incoming token
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    // Query across all users for the matching token hash
-    const tokensQuery = await db.collectionGroup('tokens').where('hash', '==', tokenHash).limit(1).get();
+    // Query directly inside the user's specific subcollection (No global index needed!)
+    const userRef = db.collection('users').doc(userId);
+    const tokensQuery = await userRef.collection('tokens').where('hash', '==', tokenHash).limit(1).get();
     
     if (tokensQuery.empty) {
       return res.status(401).json({ error: 'Invalid or revoked token' });
@@ -101,12 +109,6 @@ router.post('/token-login', async (req: any, res: any) => {
 
     const tokenDoc = tokensQuery.docs[0];
     
-    // The token's path is users/{userId}/tokens/{tokenId}
-    const userRef = tokenDoc.ref.parent.parent;
-    if (!userRef) {
-      return res.status(500).json({ error: 'Orphaned token detected' });
-    }
-
     // Verify user exists
     const userDoc = await userRef.get();
     if (!userDoc.exists) {
@@ -126,7 +128,7 @@ router.post('/token-login', async (req: any, res: any) => {
     res.json({ success: true, token: jwtToken });
   } catch (error: any) {
     console.error('Token login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
