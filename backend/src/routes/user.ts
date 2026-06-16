@@ -2,6 +2,17 @@ import { Router } from 'express';
 import { db } from '../lib/firebase';
 import { verifyToken } from '../lib/middleware';
 import crypto from 'crypto';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 
@@ -61,6 +72,41 @@ router.patch('/settings', verifyToken, async (req: any, res: any) => {
   } catch (error: any) {
     console.error('Error updating user settings:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload Avatar to Cloudinary
+router.post('/avatar', verifyToken, upload.single('avatar'), async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
+
+    // Upload to Cloudinary using upload_stream
+    const uploadToCloudinary = (buffer: Buffer): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: 'bravocloud_avatars', public_id: `user_${userId}` },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result!.secure_url);
+          }
+        );
+        stream.end(buffer);
+      });
+    };
+
+    const avatarUrl = await uploadToCloudinary(req.file.buffer);
+
+    // Update Firestore user document
+    await db.collection('users').doc(userId).update({ avatarUrl });
+
+    res.json({ message: 'Avatar updated successfully', avatarUrl });
+  } catch (error: any) {
+    console.error('Error uploading avatar:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload image' });
   }
 });
 
