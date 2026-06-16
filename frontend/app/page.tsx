@@ -1,8 +1,46 @@
+"use client";
+
 import Image from "next/image";
 import BackgroundAnimation from "./components/BackgroundAnimation";
 import { Analytics } from "@vercel/analytics/next"
+import { useState } from "react";
+import { Loader2, Key } from "lucide-react";
 
 export default function Home() {
+  const [patToken, setPatToken] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPatLogin, setShowPatLogin] = useState(false);
+
+  const handleTokenLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patToken.trim()) return;
+
+    setLoading(true);
+    setError("");
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+    try {
+      const res = await fetch(`${apiUrl}/auth/token-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: patToken }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem("bravocloud_token", data.token);
+        window.location.href = "/dashboard";
+      } else {
+        setError(data.error || "Invalid token");
+      }
+    } catch (err) {
+      setError("Failed to connect to server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen items-center justify-center bg-black font-sans text-white relative overflow-hidden">
       <BackgroundAnimation />
@@ -41,6 +79,46 @@ export default function Home() {
           <p className="text-xs text-gray-400 leading-relaxed">
             BravoCloud securely requests <span className="text-gray-200 font-medium">repository & workflow</span> access to automate your Dockerfile creation and CI/CD pipelines directly into your codebase.
           </p>
+        </div>
+
+        {/* PAT Login */}
+        <div className="mt-12 pt-12 border-t border-white/10 w-full max-w-sm mx-auto flex flex-col items-center">
+          {!showPatLogin ? (
+            <button 
+              onClick={() => setShowPatLogin(true)}
+              className="text-sm text-gray-400 hover:text-white transition-colors font-medium flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/5"
+            >
+              <Key size={16} /> Or authenticate with API Token
+            </button>
+          ) : (
+            <form onSubmit={handleTokenLogin} className="w-full flex flex-col gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <input 
+                type="password" 
+                placeholder="bc_xxxxxxxxxxxxxxxxxxxxxx"
+                value={patToken}
+                onChange={(e) => setPatToken(e.target.value)}
+                className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-white focus:ring-1 focus:ring-white transition-all text-center font-mono text-sm"
+                autoFocus
+              />
+              {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+              <div className="flex gap-2">
+                <button 
+                  type="button"
+                  onClick={() => { setShowPatLogin(false); setError(""); setPatToken(""); }}
+                  className="flex-1 bg-transparent hover:bg-white/5 border border-white/10 text-gray-300 rounded-lg px-4 py-3 font-medium transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={loading || !patToken}
+                  className="flex-[2] bg-white/10 hover:bg-white/20 border border-white/20 disabled:opacity-50 text-white rounded-lg px-4 py-3 font-medium transition-colors flex items-center justify-center gap-2 text-sm"
+                >
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : "Secure Login"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </main>
     </div>

@@ -10,6 +10,7 @@ dotenv.config();
 const router = Router();
 
 import { db } from '../lib/firebase';
+import crypto from 'crypto';
 
 // We pass a relative path so passport dynamically resolves the domain!
 passport.use(new GitHubStrategy({
@@ -80,6 +81,53 @@ router.get('/github/callback',
 
 router.get('/me', verifyToken, async (req, res) => {
   res.json({ user: req.user });
+});
+
+// Login via Personal Access Token
+router.post('/token-login', async (req: any, res: any) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    // Hash the incoming token
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Query across all users for the matching token hash
+    const tokensQuery = await db.collectionGroup('tokens').where('hash', '==', tokenHash).limit(1).get();
+    
+    if (tokensQuery.empty) {
+      return res.status(401).json({ error: 'Invalid or revoked token' });
+    }
+
+    const tokenDoc = tokensQuery.docs[0];
+    
+    // The token's path is users/{userId}/tokens/{tokenId}
+    const userRef = tokenDoc.ref.parent.parent;
+    if (!userRef) {
+      return res.status(500).json({ error: 'Orphaned token detected' });
+    }
+
+    // Verify user exists
+    const userDoc = await userRef.get();
+    if (!userDoc.exists) {
+      return res.status(401).json({ error: 'Invalid user associated with token' });
+    }
+
+    // Update lastUsed timestamp securely
+    await tokenDoc.ref.update({ lastUsed: new Date().toISOString() });
+
+    // Issue standard JWT as if they logged in via OAuth
+    const jwtToken = jwt.sign(
+      { id: userDoc.id }, 
+      process.env.JWT_SECRET || 'bravocloud_jwt_secret', 
+      { expiresIn: '7d' }
+    );
+
+    res.json({ success: true, token: jwtToken });
+  } catch (error: any) {
+    console.error('Token login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 router.post('/logout', (req, res) => {
