@@ -43,10 +43,17 @@ passport.use(new GitHubStrategy({
       } else {
         const doc = snapshot.docs[0];
         dbUserId = doc.id;
+        const existingData = doc.data();
+        
+        // Only update avatarUrl from GitHub if the user hasn't set a custom Cloudinary avatar
+        const finalAvatarUrl = existingData.avatarUrl && existingData.avatarUrl.includes('cloudinary.com') 
+          ? existingData.avatarUrl 
+          : avatarUrl;
+
         await doc.ref.update({
           name: profile.displayName || profile.username,
           username: profile.username,
-          avatarUrl: avatarUrl,
+          avatarUrl: finalAvatarUrl,
           email: email,
           githubToken: accessToken,
         });
