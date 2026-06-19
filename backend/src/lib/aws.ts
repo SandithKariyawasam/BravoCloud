@@ -1030,11 +1030,8 @@ export async function startCodeBuildJob(
   const { generateDockerfile } = require('./templates');
   const dockerfileContent = generateDockerfile(framework, installCommand, buildCommand, outputDirectory);
 
-  // We escape newlines and quotes to safely echo it in bash
-  const escapedDockerfile = dockerfileContent
-    .replace(/\\/g, '\\\\')
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, '\\n');
+  // Use base64 to completely avoid YAML and shell escaping issues
+  const b64Dockerfile = Buffer.from(dockerfileContent).toString('base64');
 
   let actualRootDir = rootDir === './' ? '.' : rootDir.replace(/^\.\//, '');
 
@@ -1062,7 +1059,7 @@ phases:
       - export COMMIT_HASH=$(git rev-parse HEAD)
       - echo "Generating Dockerfile..."
       - cd ${actualRootDir}
-      - echo -e "${escapedDockerfile}" > Dockerfile
+      - echo "${b64Dockerfile}" | base64 --decode > Dockerfile
       - echo "node_modules" > .dockerignore
       - echo ".next" >> .dockerignore
       - echo ".git" >> .dockerignore
