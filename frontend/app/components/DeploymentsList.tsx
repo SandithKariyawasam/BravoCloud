@@ -73,7 +73,7 @@ export default function DeploymentsList({ deployments, isGlobal = false }: Props
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 font-semibold">
                         <div className={`w-2 h-2 rounded-full ${(dep.status === 'SUCCESS' || dep.status === 'DEPLOYED') ? 'bg-[#22c55e]' : dep.status === 'FAILED' ? 'bg-[#ef4444]' : 'bg-[#eab308]'}`}></div>
-                        {(dep.status === 'SUCCESS' || dep.status === 'DEPLOYED') ? 'Ready' : dep.status}
+                        {(dep.status === 'SUCCESS' || dep.status === 'DEPLOYED') ? 'READY' : dep.status}
                       </div>
                     </td>
                     <td className="px-6 py-4">

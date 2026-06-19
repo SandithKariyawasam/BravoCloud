@@ -316,7 +316,7 @@ export default function ProjectDetails() {
                     <h4 className="text-[14px] text-[#a1a1aa]">Status</h4>
                     <div className="flex items-center gap-2 text-[14px] font-semibold">
                       <div className={`w-2 h-2 rounded-full ${(latestDeployment?.status === 'SUCCESS' || latestDeployment?.status === 'DEPLOYED') ? 'bg-[#22c55e]' : latestDeployment?.status === 'FAILED' ? 'bg-[#ef4444]' : 'bg-[#eab308]'}`}></div>
-                      {(latestDeployment?.status === 'SUCCESS' || latestDeployment?.status === 'DEPLOYED') ? 'Ready' : latestDeployment?.status || 'Unknown'}
+                      {(latestDeployment?.status === 'SUCCESS' || latestDeployment?.status === 'DEPLOYED') ? 'READY' : latestDeployment?.status || 'Unknown'}
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">

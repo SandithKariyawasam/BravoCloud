@@ -115,26 +115,42 @@ export default function ProjectSelector({ title, targetRoute, icon }: ProjectSel
               </div>
             ) : (
               <div className="flex flex-col gap-1 max-h-[400px] overflow-y-auto custom-sidebar-scrollbar pr-2">
-                {filteredProjects.map((project) => (
-                  <button 
-                    key={project.id}
-                    onClick={() => router.push(`/dashboard/project/${project.id}/${targetRoute}`)}
-                    className="flex items-center gap-4 w-full p-3 rounded-lg hover:bg-[#18181b] transition-colors text-left border border-transparent hover:border-[#27272a] group"
-                  >
-                    <div className="w-6 h-6 rounded-md overflow-hidden bg-[#27272a] flex items-center justify-center border border-[#3f3f46]">
-                      {project.framework === 'nextjs' && <div className="text-xs font-bold text-white">N</div>}
-                      {project.framework === 'react' && <div className="text-xs font-bold text-blue-400">R</div>}
-                      {project.framework === 'vite' && <div className="text-xs font-bold text-yellow-400">V</div>}
-                      {project.framework === 'html' && <div className="text-xs font-bold text-orange-500">H</div>}
-                      {!['nextjs', 'react', 'vite', 'html'].includes(project.framework) && (
-                        <div className="text-xs font-bold text-white flex items-center justify-center w-full h-full">
-                          <Image src="/BravoCloud-logo.png" alt="BravoCloud" width={14} height={14} className="opacity-50" />
+                {filteredProjects.map((project) => {
+                  const publicUrl = project.customDomain ? `https://${project.customDomain}` : (project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null);
+                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+                  return (
+                    <button 
+                      key={project.id}
+                      onClick={() => router.push(`/dashboard/project/${project.id}/${targetRoute}`)}
+                      className="flex items-center gap-4 w-full p-3 rounded-lg hover:bg-[#18181b] transition-colors text-left border border-transparent hover:border-[#27272a] group"
+                    >
+                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center border border-[#3f3f46] relative flex-shrink-0">
+                        <div className="fallback-icon absolute inset-0 flex items-center justify-center bg-[#27272a] z-0">
+                          {project.framework === 'nextjs' && <div className="text-xs font-bold text-white">N</div>}
+                          {project.framework === 'react' && <div className="text-xs font-bold text-blue-400">R</div>}
+                          {project.framework === 'vite' && <div className="text-xs font-bold text-yellow-400">V</div>}
+                          {project.framework === 'html' && <div className="text-xs font-bold text-orange-500">H</div>}
+                          {!['nextjs', 'react', 'vite', 'html'].includes(project.framework) && (
+                            <div className="text-xs font-bold text-white flex items-center justify-center w-full h-full">
+                              <Image src="/BravoCloud-logo.png" alt="BravoCloud" width={14} height={14} className="opacity-50" />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <span className="font-semibold text-[15px]">{project.name}</span>
-                  </button>
-                ))}
+                        {publicUrl && (
+                          <img
+                            src={`${apiUrl}/api/projects/proxy-favicon?url=${encodeURIComponent(publicUrl)}`}
+                            className="absolute inset-0 w-full h-full object-cover z-10"
+                            alt={project.name}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span className="font-semibold text-[15px]">{project.name}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

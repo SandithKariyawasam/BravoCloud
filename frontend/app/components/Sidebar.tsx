@@ -327,10 +327,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
               "General", "Git",
               "Security", "Serverless Functions", "Cron Jobs", "Edge Network", "Advanced"
             ] : [
-              "General", "Billing", "Build and Deployment", "Invoices", "Members",
-              "Access Groups", "Agent", "Drains", "Alerts", "Webhooks",
-              "Security & Privacy", "Deployment Protection", "Microfrontends",
-              "Networking", "Activity", "My Notifications", "Apps"
+              "General", "Billing", "Invoices", "Agent", "Drains", "Alerts", "Webhooks",
+              "Security & Privacy", "Deployment Protection", "Activity", "My Notifications"
             ]).map(item => (
               <SidebarItem
                 key={item}
