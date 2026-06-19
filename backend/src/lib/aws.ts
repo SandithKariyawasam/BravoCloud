@@ -637,9 +637,10 @@ export async function getRealAWSUsage(userId: string): Promise<any[]> {
 }
 
 export async function deleteProjectInfrastructure(projectName: string, storageItems: any[]): Promise<void> {
-  const repoName = `bravocloud-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const repoName = `bravocloud-${sanitizedName}`;
   const clusterName = "bravocloud-cluster";
-  const serviceName = repoName;
+  const serviceName = `bravocloud-service-${sanitizedName}`;
 
   // 1. Delete ECR Repository
   try {
