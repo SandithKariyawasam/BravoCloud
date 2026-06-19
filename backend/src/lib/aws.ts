@@ -702,6 +702,19 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
     }
   }
 
+  // 1.5 Delete CodeBuild Project
+  try {
+    const { CodeBuildClient, DeleteProjectCommand } = require("@aws-sdk/client-codebuild");
+    const codebuildClient = new CodeBuildClient({ region });
+    const cbProjectName = `bravocloud-build-${sanitizedName}`;
+    await codebuildClient.send(new DeleteProjectCommand({ name: cbProjectName }));
+    console.log(`Deleted CodeBuild project: ${cbProjectName}`);
+  } catch (e: any) {
+    if (e.name !== "ResourceNotFoundException") {
+      console.warn(`Failed to delete CodeBuild project for ${sanitizedName}:`, e.message);
+    }
+  }
+
   // 2. Delete ECS Service
   try {
     const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
@@ -1044,6 +1057,7 @@ phases:
       - git clone https://\${GITHUB_TOKEN}@github.com/\${REPO_URL#https://github.com/} app
       - cd app
       - git checkout $BRANCH
+      - export COMMIT_HASH=$(git rev-parse HEAD)
       - echo "Generating Dockerfile..."
       - cd ${actualRootDir}
       - echo -e "${escapedDockerfile}" > Dockerfile
@@ -1053,16 +1067,16 @@ phases:
   build:
     commands:
       - echo "Building the Docker image..."
-      - docker build -t $ECR_URI:latest -t $ECR_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+      - docker build -t $ECR_URI:latest -t $ECR_URI:$COMMIT_HASH .
   post_build:
     commands:
       - echo "Build completed! Pushing to ECR..."
       - docker push $ECR_URI:latest
-      - docker push $ECR_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - docker push $ECR_URI:$COMMIT_HASH
       - echo "Triggering BravoCloud Webhook..."
       - |
         if [ $CODEBUILD_BUILD_SUCCEEDING -eq 1 ]; then
-          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"SUCCESS\\", \\"commitHash\\":\\"$CODEBUILD_RESOLVED_SOURCE_VERSION\\"}"
+          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"SUCCESS\\", \\"commitHash\\":\\"$COMMIT_HASH\\"}"
         else
           curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"FAILED\\"}"
         fi
