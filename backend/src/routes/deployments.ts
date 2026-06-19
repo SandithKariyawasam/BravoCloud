@@ -77,9 +77,11 @@ router.post('/webhook', async (req: any, res: any) => {
     const updatedDoc = await deploymentRef.get();
     const updatedDeployment = updatedDoc.data();
 
-    // If the build succeeded, push to App Runner
-    if (status === 'SUCCESS' && projectId) {
-      const projectRef = db.collection('projects').doc(projectId);
+    // If the build succeeded, push to App Runner/ECS
+    const actualProjectId = projectId || (updatedDeployment && updatedDeployment.projectId);
+    
+    if (status === 'SUCCESS' && actualProjectId) {
+      const projectRef = db.collection('projects').doc(actualProjectId);
       const projectDoc = await projectRef.get();
       
       if (projectDoc.exists) {
