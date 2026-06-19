@@ -105,73 +105,38 @@ router.post('/', verifyToken, async (req: any, res: any) => {
     const dynamicBackendUrl = `${protocol}://${host}`;
     const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
     
-    const dockerfileContent = generateDockerfile(framework, installCommand, buildCommand, outputDirectory);
-    const workflowContent = generateWorkflow(webhookUrl, projectRef.id, deploymentRef.id, ecrUri, branch, rootDir);
-
-    // Make sure Dockerfile goes into the correct root directory
-    let dockerfilePath = 'Dockerfile';
-    if (rootDir !== './') {
-      dockerfilePath = `${rootDir.substring(2)}/Dockerfile`;
-    }
-
-    const filesToCommit = [
-      { path: dockerfilePath, content: dockerfileContent },
-      { 
-        path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore', 
-        content: 'node_modules\n.next\n.git\n.env*\n' 
-      },
-      { path: '.github/workflows/bravocloud.yml', content: workflowContent }
-    ];
-
     let finalDeploymentData = { ...deploymentData };
 
     try {
-      // Inject AWS credentials into the user's repository secrets
-      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-        try {
-          await setupRepositorySecrets(
-            user.githubToken,
-            repoOwner,
-            repoName,
-            {
-              AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-              AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY
-            }
-          );
-          console.log(`[Secrets] Injected AWS credentials into ${repoOwner}/${repoName}`);
-        } catch (secretErr) {
-          console.error(`[Secrets] Failed to inject AWS credentials:`, secretErr);
-          // We can proceed, but the GitHub action will fail.
-        }
-      }
-
-      // Commit files to the user's repository
-      const commit = await commitProjectFiles(
+      const { startCodeBuildJob } = require('../lib/aws');
+      await startCodeBuildJob(
+        projectData.name,
         user.githubToken,
-        repoOwner,
-        repoName,
-        filesToCommit,
-        branch
+        projectData.repoUrl,
+        projectData.branch || 'main',
+        projectData.framework,
+        projectData.buildCommand,
+        projectData.installCommand,
+        projectData.outputDirectory,
+        projectData.rootDir,
+        webhookUrl,
+        deploymentRef.id,
+        userId
       );
 
-      // Update deployment with actual commit hash and status
       finalDeploymentData.status = 'BUILDING';
-      finalDeploymentData.commitHash = commit.sha;
-      await deploymentRef.update({
-        status: 'BUILDING',
-        commitHash: commit.sha
-      });
-    } catch (githubError: any) {
-      console.error('Failed to commit to GitHub:', githubError);
+      // We don't have a commit hash yet, but we can set it later if needed or leave it as initial-commit
+      await deploymentRef.update({ status: 'BUILDING' });
+    } catch (awsError: any) {
+      console.error('Failed to trigger CodeBuild:', awsError);
       finalDeploymentData.status = 'FAILED';
       await deploymentRef.update({ status: 'FAILED' });
       
-      // We still return 201 because the project was created, but with a warning.
       return res.status(201).json({ 
         success: true, 
         project: projectData, 
         deployment: finalDeploymentData, 
-        warning: `Project created but failed to commit files to GitHub: ${githubError.message || githubError.toString()}` 
+        warning: `Project created but failed to start build process: ${awsError.message || awsError.toString()}` 
       });
     }
 
@@ -434,47 +399,28 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
     const dynamicBackendUrl = `${protocol}://${host}`;
     const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
     
-    const dockerfileContent = generateDockerfile(projectData.framework, projectData.installCommand, projectData.buildCommand, projectData.outputDirectory);
-    const workflowContent = generateWorkflow(webhookUrl, projectData.id, deploymentRef.id, ecrUri, projectData.branch || 'main', projectData.rootDir || './');
-
-    let dockerfilePath = 'Dockerfile';
-    const rootDir = projectData.rootDir || './';
-    if (rootDir !== './') {
-      dockerfilePath = `${rootDir.substring(2)}/Dockerfile`;
-    }
-
-    const filesToCommit = [
-      { path: dockerfilePath, content: dockerfileContent },
-      { 
-        path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore', 
-        content: 'node_modules\n.next\n.git\n.env*\n' 
-      },
-      { path: '.github/workflows/bravocloud.yml', content: workflowContent }
-    ];
-
-    // Push files to GitHub
     try {
-      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-        try {
-          await setupRepositorySecrets(user.githubToken, repoOwner, repoName, {
-            AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-            AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY
-          });
-        } catch (secretErr) {}
-      }
-      
-      await commitProjectFiles(
+      const { startCodeBuildJob } = require('../lib/aws');
+      await startCodeBuildJob(
+        projectData.name,
         user.githubToken,
-        repoOwner,
-        repoName,
-        filesToCommit,
+        projectData.repoUrl,
         projectData.branch || 'main',
-        `Redeploy BravoCloud project ${projectData.name}`
+        projectData.framework,
+        projectData.buildCommand,
+        projectData.installCommand,
+        projectData.outputDirectory,
+        projectData.rootDir,
+        webhookUrl,
+        deploymentRef.id,
+        userId
       );
-    } catch (githubError) {
-      console.error('Failed to commit redeploy files:', githubError);
+
+      await deploymentRef.update({ status: 'BUILDING' });
+    } catch (awsError) {
+      console.error('Failed to trigger CodeBuild:', awsError);
       await deploymentRef.update({ status: 'FAILED' });
-      return res.status(500).json({ error: 'Failed to trigger redeployment on GitHub' });
+      return res.status(500).json({ error: 'Failed to trigger redeployment on AWS CodeBuild' });
     }
 
     res.json({ message: 'Redeployment triggered successfully', deployment: deploymentData });

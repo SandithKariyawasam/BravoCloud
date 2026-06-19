@@ -58,7 +58,56 @@ async function getOrCreateEcsExecutionRole(): Promise<string> {
     PolicyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
   }));
 
-  // Wait for IAM propagation
+  // Wait briefly for role to propagate
+  await new Promise(resolve => setTimeout(resolve, 5000));
+
+  return roleArn || "";
+}
+
+async function getOrCreateCodeBuildRole(): Promise<string> {
+  const roleName = "BravoCloudCodeBuildRole";
+  
+  try {
+    const roleResponse = await iamClient.send(new GetRoleCommand({ RoleName: roleName }));
+    return roleResponse.Role?.Arn || "";
+  } catch (error: any) {
+    if (error.name !== "NoSuchEntityException") {
+      throw error;
+    }
+  }
+
+  // Create role
+  const trustPolicy = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: {
+          Service: "codebuild.amazonaws.com"
+        },
+        Action: "sts:AssumeRole"
+      }
+    ]
+  };
+
+  const createRoleRes = await iamClient.send(new CreateRoleCommand({
+    RoleName: roleName,
+    AssumeRolePolicyDocument: JSON.stringify(trustPolicy)
+  }));
+
+  const roleArn = createRoleRes.Role?.Arn;
+
+  await iamClient.send(new AttachRolePolicyCommand({
+    RoleName: roleName,
+    PolicyArn: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+  }));
+
+  await iamClient.send(new AttachRolePolicyCommand({
+    RoleName: roleName,
+    PolicyArn: "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
+  }));
+
+  // Wait briefly for role to propagate
   await new Promise(resolve => setTimeout(resolve, 10000));
 
   return roleArn || "";
@@ -939,6 +988,122 @@ export async function syncProjectCognitoAuth(projectName: string, password: stri
   }));
 
   return { clientId: appClient.ClientId };
+}
+
+export async function startCodeBuildJob(
+  projectName: string,
+  githubToken: string,
+  repoUrl: string,
+  branch: string,
+  framework: string,
+  buildCommand: string | null,
+  installCommand: string | null,
+  outputDirectory: string | null,
+  rootDir: string = './',
+  webhookUrl: string,
+  deploymentId: string,
+  userId: string
+): Promise<void> {
+  const { CodeBuildClient, CreateProjectCommand, StartBuildCommand, UpdateProjectCommand } = require("@aws-sdk/client-codebuild");
+  const codebuildClient = new CodeBuildClient({ region });
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const cbProjectName = `bravocloud-build-${sanitizedName}`;
+  const roleArn = await getOrCreateCodeBuildRole();
+  const accountId = await getAwsAccountId();
+  const ecrRepoName = `bravocloud-${sanitizedName}`;
+  const ecrUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}`;
+
+  // Generate dynamic Dockerfile content matching the template
+  const { generateDockerfile } = require('./templates');
+  const dockerfileContent = generateDockerfile(framework, installCommand, buildCommand, outputDirectory);
+
+  // We escape newlines and quotes to safely echo it in bash
+  const escapedDockerfile = dockerfileContent
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n');
+
+  let actualRootDir = rootDir === './' ? '.' : rootDir.replace(/^\.\//, '');
+
+  const buildspec = `
+version: 0.2
+env:
+  variables:
+    REPO_URL: "${repoUrl}"
+    GITHUB_TOKEN: "${githubToken}"
+    BRANCH: "${branch}"
+    WEBHOOK_URL: "${webhookUrl}"
+    DEPLOYMENT_ID: "${deploymentId}"
+    ECR_URI: "${ecrUri}"
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin $ECR_URI
+      - echo "Cloning user repository..."
+      - git clone https://\${GITHUB_TOKEN}@github.com/\${REPO_URL#https://github.com/} app
+      - cd app
+      - git checkout $BRANCH
+      - echo "Generating Dockerfile..."
+      - cd ${actualRootDir}
+      - echo -e "${escapedDockerfile}" > Dockerfile
+      - echo "node_modules" > .dockerignore
+      - echo ".next" >> .dockerignore
+      - echo ".git" >> .dockerignore
+  build:
+    commands:
+      - echo "Building the Docker image..."
+      - docker build -t $ECR_URI:latest -t $ECR_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+  post_build:
+    commands:
+      - echo "Build completed! Pushing to ECR..."
+      - docker push $ECR_URI:latest
+      - docker push $ECR_URI:$CODEBUILD_RESOLVED_SOURCE_VERSION
+      - echo "Triggering BravoCloud Webhook..."
+      - |
+        if [ $CODEBUILD_BUILD_SUCCEEDING -eq 1 ]; then
+          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"SUCCESS\\", \\"commitHash\\":\\"$CODEBUILD_RESOLVED_SOURCE_VERSION\\"}"
+        else
+          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"FAILED\\"}"
+        fi
+`;
+
+  // Create or Update CodeBuild Project
+  try {
+    await codebuildClient.send(new CreateProjectCommand({
+      name: cbProjectName,
+      serviceRole: roleArn,
+      artifacts: { type: "NO_ARTIFACTS" },
+      environment: {
+        type: "LINUX_CONTAINER",
+        image: "aws/codebuild/standard:7.0",
+        computeType: "BUILD_GENERAL1_SMALL",
+        privilegedMode: true, // Needed for Docker build
+      },
+      source: {
+        type: "NO_SOURCE", // We handle the git clone manually in buildspec
+        buildspec: buildspec
+      },
+      timeoutInMinutes: 30
+    }));
+  } catch (e: any) {
+    if (e.name === "ResourceAlreadyExistsException") {
+      await codebuildClient.send(new UpdateProjectCommand({
+        name: cbProjectName,
+        source: {
+          type: "NO_SOURCE",
+          buildspec: buildspec
+        }
+      }));
+    } else {
+      throw e;
+    }
+  }
+
+  // Trigger Build
+  await codebuildClient.send(new StartBuildCommand({
+    projectName: cbProjectName
+  }));
 }
 
 export async function updateProjectALBAuth(projectName: string, passwordProtection: boolean, clientId?: string) {
