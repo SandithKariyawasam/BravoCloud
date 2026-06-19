@@ -258,7 +258,7 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   // 4. Get Network Config
   const { subnets, sgId } = await getNetworkConfiguration(port);
 
-  const serviceName = `bravocloud-service-${sanitizedName}`;
+  const serviceName = `bc-svc-${sanitizedName}-${port}`;
 
   // 5. Setup Load Balancer Routing
   const elbClient = new ElasticLoadBalancingV2Client({ region });
@@ -274,7 +274,8 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   if (!httpsListenerArn) throw new Error("HTTPS Listener not found");
 
   // Create Target Group for this project
-  const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32); // Max 32 chars
+  const rawTgName = `bc-tg-${sanitizedName}-${port}`;
+  const tgName = rawTgName.substring(0, 32); // Max 32 chars
   let tgArn = "";
   try {
     const tgRes = await elbClient.send(new CreateTargetGroupCommand({
@@ -299,7 +300,6 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
 
   // Create Listener Rule for Host Routing
   try {
-    // Attempt to create the rule. Note: in a real production system, you would check if it exists first.
     const priority = Math.floor(Math.random() * 49999) + 1;
     await elbClient.send(new CreateRuleCommand({
       ListenerArn: httpsListenerArn,
@@ -307,9 +307,18 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
       Priority: priority,
       Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
     }));
-  } catch (ruleErr) {
-    // If priority is taken or rule exists, ignore for now as it routes to the correct TG
-    console.log("HTTPS Rule might already exist, proceeding...");
+  } catch (ruleErr: any) {
+    // If priority is taken or rule exists, update it to point to the new TG
+    const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpsListenerArn }));
+    const existingRule = rulesRes.Rules?.find(r => 
+      r.Conditions?.some(c => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
+    );
+    if (existingRule) {
+      await elbClient.send(new ModifyRuleCommand({
+        RuleArn: existingRule.RuleArn,
+        Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
+      }));
+    }
   }
 
   // Create HTTP to HTTPS Redirect Rule
@@ -334,7 +343,8 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
     }
   }
 
-  // 6. Create or Recreate Service
+  // 6. Create or Recreate Service with port in name
+  const serviceName = `bc-svc-${sanitizedName}-${port}`;
   const createServiceInput = {
     cluster: clusterName,
     serviceName: serviceName,
@@ -371,13 +381,17 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
       console.log("Service updated successfully with new deployment!");
     } catch (updateErr: any) {
       if (updateErr.name === "InvalidParameterException" || err.message.includes("idempotent")) {
-        // Fallback for massive structural changes (like adding LB)
+        console.log("Service update failed due to structural change. Deleting and recreating...");
         const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
-        console.log("Service update failed, recreating service...");
         await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
         
-        await new Promise(r => setTimeout(r, 5000));
-        await ecsClient.send(new CreateServiceCommand(createServiceInput as any));
+        // Wait 15 seconds to ensure deletion propagates before recreation
+        await new Promise(r => setTimeout(r, 15000));
+        try {
+          await ecsClient.send(new CreateServiceCommand(createServiceInput as any));
+        } catch (recreateErr: any) {
+          console.error("Recreation failed, but continuing as it might eventually stabilize:", recreateErr.message);
+        }
       } else {
         throw updateErr;
       }
@@ -442,8 +456,9 @@ export async function addCustomDomainRoute(projectName: string, domain: string):
     }
   }
 
-  // 5. Find Target Group
-  const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32);
+  // 5. Create Target Group with port in name to allow framework switches
+  const rawTgName = `bc-tg-${sanitizedName}-${port}`;
+  const tgName = rawTgName.substring(0, 32);
   const descTgRes = await elbClient.send(new DescribeTargetGroupsCommand({ Names: [tgName] }));
   const tgArn = descTgRes.TargetGroups?.[0]?.TargetGroupArn;
 
