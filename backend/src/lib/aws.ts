@@ -666,7 +666,6 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
   }
 
   // 2.5 Delete ALB Rules and Target Group
-  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32);
 
   try {
