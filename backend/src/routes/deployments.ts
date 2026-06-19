@@ -93,7 +93,16 @@ router.post('/webhook', async (req: any, res: any) => {
           const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
 
           const envs = project.envVars ? (project.envVars as Record<string, string>) : undefined;
-          const ecsUrl = await deployToECS(project.name, imageUri, envs);
+          
+          const framework = (project.framework || "").toLowerCase();
+          let targetPort = "3000";
+          if (framework.includes("react") || framework.includes("vite") || framework.includes("vue") || framework.includes("svelte") || framework.includes("angular")) {
+            targetPort = "80";
+          } else if (framework.includes("python") || framework.includes("django") || framework.includes("flask") || framework.includes("fastapi")) {
+            targetPort = "8000";
+          }
+
+          const ecsUrl = await deployToECS(project.name, imageUri, envs, targetPort);
           
           console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
           
@@ -103,7 +112,7 @@ router.post('/webhook', async (req: any, res: any) => {
           const taskIp = await getEcsTaskPublicIp(project.name);
           
           // Store the live URL and new IP on the project document
-          const updatePayload: any = {};
+          const updatePayload: any = { port: parseInt(targetPort) };
           if (ecsUrl) {
             updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
           }
