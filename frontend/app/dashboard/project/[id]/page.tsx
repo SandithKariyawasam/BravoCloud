@@ -289,8 +289,8 @@ export default function ProjectDetails() {
                 {/* Deployment */}
                 <div className="flex flex-col gap-2">
                   <h4 className="text-[14px] text-[#a1a1aa]">Deployment</h4>
-                  <a href={project.taskIp ? `http://${project.taskIp}:3000` : (publicUrl || '#')} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
-                    {project.taskIp ? `http://${project.taskIp}:3000` : 'Deploying...'}
+                  <a href={project.taskIp ? `http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}` : (publicUrl || '#')} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
+                    {project.taskIp ? `http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}` : 'Deploying...'}
                   </a>
                 </div>
 

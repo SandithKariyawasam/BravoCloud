@@ -499,7 +499,6 @@ export async function removeCustomDomainRoute(certArn: string): Promise<void> {
 export async function getEcsTaskPublicIp(projectName: string): Promise<string | null> {
   const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const clusterName = `bravocloud-cluster`;
-  const serviceName = `bravocloud-service-${sanitizedName}`;
 
   try {
     const { ECSClient, ListTasksCommand, DescribeTasksCommand } = require("@aws-sdk/client-ecs");
@@ -515,7 +514,7 @@ export async function getEcsTaskPublicIp(projectName: string): Promise<string | 
     for (let i = 0; i < 30; i++) {
       const listRes = await ecs.send(new ListTasksCommand({
         cluster: clusterName,
-        serviceName: serviceName,
+        family: `bravocloud-task-${sanitizedName}`,
         desiredStatus: "RUNNING"
       }));
 
@@ -710,7 +709,6 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
   const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const repoName = `bravocloud-${sanitizedName}`;
   const clusterName = "bravocloud-cluster";
-  const serviceName = `bravocloud-service-${sanitizedName}`;
 
   // 1. Delete ECR Repository
   try {
@@ -738,21 +736,45 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
 
   // 2. Delete ECS Service
   try {
-    const { DeleteServiceCommand } = require("@aws-sdk/client-ecs");
-    await ecsClient.send(new UpdateServiceCommand({ cluster: clusterName, service: serviceName, desiredCount: 0 }));
-    await ecsClient.send(new DeleteServiceCommand({ cluster: clusterName, service: serviceName, force: true }));
-    console.log(`Deleted ECS service: ${serviceName}`);
-  } catch (e: any) {
-    if (e.name !== "ServiceNotFoundException" && e.name !== "ClusterNotFoundException") {
-      console.warn(`Failed to delete ECS service ${serviceName}:`, e.message);
+    const { ECSClient, ListServicesCommand, UpdateServiceCommand, DeleteServiceCommand } = require("@aws-sdk/client-ecs");
+    const ecsClientLocal = new ECSClient({ region });
+    
+    // Find all services matching this project
+    const listServicesRes = await ecsClientLocal.send(new ListServicesCommand({ cluster: clusterName, maxResults: 100 }));
+    const targetServices = listServicesRes.serviceArns?.filter((arn: string) => 
+      arn.includes(`bravocloud-service-${sanitizedName}`) || arn.includes(`bc-svc-${sanitizedName}`)
+    ) || [];
+
+    for (const svcArn of targetServices) {
+      await ecsClientLocal.send(new UpdateServiceCommand({ cluster: clusterName, service: svcArn, desiredCount: 0 }));
+      await ecsClientLocal.send(new DeleteServiceCommand({ cluster: clusterName, service: svcArn, force: true }));
+      console.log(`Deleted ECS service: ${svcArn}`);
     }
+  } catch (e: any) {
+    console.warn(`Failed to delete ECS service for ${sanitizedName}:`, e.message);
   }
 
-  // 2.5 Delete ALB Rules and Target Group
-  const tgName = `bravocloud-tg-${sanitizedName}`.substring(0, 32);
-
+  // 3. Delete Target Group
   try {
-    const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, DescribeRulesCommand, DeleteRuleCommand, DescribeTargetGroupsCommand, DeleteTargetGroupCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+    const { ElasticLoadBalancingV2Client, DescribeTargetGroupsCommand, DeleteTargetGroupCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+    const elbClientLocal = new ElasticLoadBalancingV2Client({ region });
+    
+    const descTgRes = await elbClientLocal.send(new DescribeTargetGroupsCommand({}));
+    const targetGroups = descTgRes.TargetGroups?.filter((tg: any) => 
+      tg.TargetGroupName?.includes(`bravocloud-tg-${sanitizedName}`) || tg.TargetGroupName?.includes(`bc-tg-${sanitizedName}`)
+    ) || [];
+
+    for (const tg of targetGroups) {
+      await elbClientLocal.send(new DeleteTargetGroupCommand({ TargetGroupArn: tg.TargetGroupArn }));
+      console.log(`Deleted Target Group: ${tg.TargetGroupName}`);
+    }
+  } catch (e: any) {
+    console.warn(`Failed to delete Target Group for ${sanitizedName}:`, e.message);
+  }
+
+  // 2.5 Delete ALB Rules
+  try {
+    const { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, DescribeRulesCommand, DeleteRuleCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
     const elbClient = new ElasticLoadBalancingV2Client({ region });
 
     const albRes = await elbClient.send(new DescribeLoadBalancersCommand({ Names: ["bravocloud-alb"] }));
