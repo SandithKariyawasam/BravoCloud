@@ -936,8 +936,8 @@ export async function updateProjectWAF(projectName: string, mode: string, ips: s
 export async function setupCognitoUserPool(): Promise<{ poolId: string, domain: string }> {
   const { CognitoIdentityProviderClient, ListUserPoolsCommand, CreateUserPoolCommand, CreateUserPoolDomainCommand } = require("@aws-sdk/client-cognito-identity-provider");
   const client = new CognitoIdentityProviderClient({ region });
-  const poolName = "bravocloud-auth-pool";
-  const domainPrefix = `bravocloud-auth-${process.env.AWS_ACCOUNT_ID || 'demo'}`;
+  const accountId = await getAwsAccountId();
+  const domainPrefix = `bravocloud-auth-${accountId || 'demo'}`;
 
   const listRes = await client.send(new ListUserPoolsCommand({ MaxResults: 50 }));
   let pool = listRes.UserPools?.find((p: any) => p.Name === poolName);
@@ -1160,7 +1160,7 @@ export async function updateProjectALBAuth(projectName: string, passwordProtecti
           Type: "authenticate-cognito",
           Order: 1,
           AuthenticateCognitoConfig: {
-            UserPoolArn: `arn:aws:cognito-idp:${region}:${process.env.AWS_ACCOUNT_ID || '654654320491'}:userpool/${poolId}`,
+            UserPoolArn: `arn:aws:cognito-idp:${region}:${await getAwsAccountId()}:userpool/${poolId}`,
             UserPoolClientId: clientId,
             UserPoolDomain: domain,
             SessionCookieName: "AWSELBAuthSessionCookie",
@@ -1220,7 +1220,8 @@ export async function syncServerlessFunctions(projectName: string, functions: an
   // Very basic minimal zip for Node.js lambda (buffer of a zip file containing index.js)
   // This is a pre-compiled base64 zip containing: exports.handler = async () => "Placeholder";
   const dummyZipBuffer = Buffer.from("UEsDBAoAAAAAALyPqlgAAAAAAAAAAAAAAAAIAAAAaW5kZXguanNleHBvcnRzLmhhbmRsZXIgPSBhc3luYyAodmFsdWUpID0+ICgiUGxhY2Vob2xkZXIiKTsKUEsBAhQACgAAAAAAvI+qWAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAP8BAAAAAGluZGV4LmpzUEsFBgAAAAABAAEANgAAAD0AAAAAAA==", "base64");
-  const executionRole = process.env.LAMBDA_EXECUTION_ROLE || `arn:aws:iam::${process.env.AWS_ACCOUNT_ID || '654654320491'}:role/ecsTaskExecutionRole`;
+  const accountId = await getAwsAccountId();
+  const executionRole = process.env.LAMBDA_EXECUTION_ROLE || `arn:aws:iam::${accountId}:role/ecsTaskExecutionRole`;
 
   for (const func of functions) {
     const lambdaName = `bc-${sanitizedName}-${func.name}`;
@@ -1290,7 +1291,8 @@ export async function syncCronJobs(projectName: string, jobs: any[]) {
 
   // We need an IAM Role that allows EventBridge Scheduler to invoke the API destination
   // For demo purposes we can assume an existing execution role
-  const executionRoleArn = process.env.SCHEDULER_EXECUTION_ROLE || `arn:aws:iam::${process.env.AWS_ACCOUNT_ID || '654654320491'}:role/ecsTaskExecutionRole`;
+  const accountId = await getAwsAccountId();
+  const executionRoleArn = process.env.SCHEDULER_EXECUTION_ROLE || `arn:aws:iam::${accountId}:role/ecsTaskExecutionRole`;
 
   // Fetch existing schedules for this project (using a prefix convention)
   const prefix = `bc-${sanitizedName}-`;

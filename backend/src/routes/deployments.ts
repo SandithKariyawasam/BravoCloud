@@ -89,7 +89,7 @@ router.post('/webhook', async (req: any, res: any) => {
         try {
           const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
           const region = process.env.AWS_REGION || "us-east-1";
-          const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
+          const accountId = await getAwsAccountId();
           const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
 
           const envs = project.envVars ? (project.envVars as Record<string, string>) : undefined;

@@ -486,7 +486,7 @@ router.post('/:id/deployments/:deploymentId/rollback', verifyToken, async (req: 
         const { getAwsAccountId, deployToECS, getEcsTaskPublicIp } = require('../lib/aws');
         const ecrRepoName = `bravocloud-${projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
         const region = process.env.AWS_REGION || "us-east-1";
-        const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
+        const accountId = await getAwsAccountId();
         
         // Pass the exact commitHash instead of 'latest'
         const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:${targetDeploymentData.commitHash}`;
