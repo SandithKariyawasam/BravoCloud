@@ -298,48 +298,70 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
     }
   }
 
-  // Create Listener Rule for Host Routing
+  // Create or Update Listener Rule for Host Routing
   try {
-    const priority = Math.floor(Math.random() * 49999) + 1;
-    await elbClient.send(new CreateRuleCommand({
-      ListenerArn: httpsListenerArn,
-      Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
-      Priority: priority,
-      Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
-    }));
-  } catch (ruleErr: any) {
-    // If priority is taken or rule exists, update it to point to the new TG
     const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpsListenerArn }));
-    const existingRule = rulesRes.Rules?.find((r: any) => 
+    const existingRules = rulesRes.Rules?.filter((r: any) => 
       r.Conditions?.some((c: any) => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
-    );
-    if (existingRule) {
+    ) || [];
+
+    if (existingRules.length > 0) {
+      // Modify the first matching rule to point to the new TG
       await elbClient.send(new ModifyRuleCommand({
-        RuleArn: existingRule.RuleArn,
+        RuleArn: existingRules[0].RuleArn,
+        Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
+      }));
+      
+      // If there are duplicates from the previous bug, delete them to prevent priority collisions
+      for (let i = 1; i < existingRules.length; i++) {
+        const { DeleteRuleCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+        await elbClient.send(new DeleteRuleCommand({ RuleArn: existingRules[i].RuleArn }));
+      }
+    } else {
+      const priority = Math.floor(Math.random() * 49999) + 1;
+      await elbClient.send(new CreateRuleCommand({
+        ListenerArn: httpsListenerArn,
+        Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
+        Priority: priority,
         Actions: [{ Type: "forward", TargetGroupArn: tgArn }]
       }));
     }
+  } catch (ruleErr: any) {
+    console.error("Failed to configure HTTPS listener rule:", ruleErr.message);
   }
 
   // Create HTTP to HTTPS Redirect Rule
   if (httpListenerArn) {
     try {
-      const httpPriority = Math.floor(Math.random() * 49999) + 1;
-      await elbClient.send(new CreateRuleCommand({
-        ListenerArn: httpListenerArn,
-        Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
-        Priority: httpPriority,
-        Actions: [{
-          Type: "redirect",
-          RedirectConfig: {
-            Protocol: "HTTPS",
-            Port: "443",
-            StatusCode: "HTTP_301"
-          }
-        }]
-      }));
+      const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpListenerArn }));
+      const existingRules = rulesRes.Rules?.filter((r: any) => 
+        r.Conditions?.some((c: any) => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
+      ) || [];
+
+      if (existingRules.length > 0) {
+        // HTTP rule already exists. Just clean up duplicates if any.
+        for (let i = 1; i < existingRules.length; i++) {
+          const { DeleteRuleCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
+          await elbClient.send(new DeleteRuleCommand({ RuleArn: existingRules[i].RuleArn }));
+        }
+      } else {
+        const httpPriority = Math.floor(Math.random() * 49999) + 1;
+        await elbClient.send(new CreateRuleCommand({
+          ListenerArn: httpListenerArn,
+          Conditions: [{ Field: "host-header", HostHeaderConfig: { Values: [`${sanitizedName}.bravocloud.tech`] } }],
+          Priority: httpPriority,
+          Actions: [{
+            Type: "redirect",
+            RedirectConfig: {
+              Protocol: "HTTPS",
+              Port: "443",
+              StatusCode: "HTTP_301"
+            }
+          }]
+        }));
+      }
     } catch (httpRuleErr) {
-      console.log("HTTP Redirect Rule might already exist, proceeding...");
+      console.log("HTTP Redirect Rule config failed:", httpRuleErr);
     }
   }
 
