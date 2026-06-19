@@ -4,7 +4,7 @@ import { IAMClient, GetRoleCommand, CreateRoleCommand, AttachRolePolicyCommand }
 import { EC2Client, DescribeVpcsCommand, DescribeSubnetsCommand, CreateSecurityGroupCommand, AuthorizeSecurityGroupIngressCommand, DescribeSecurityGroupsCommand, DescribeNetworkInterfacesCommand } from "@aws-sdk/client-ec2";
 import { ECSClient, CreateClusterCommand, RegisterTaskDefinitionCommand, CreateServiceCommand, ListTasksCommand, DescribeTasksCommand, UpdateServiceCommand } from "@aws-sdk/client-ecs";
 
-import { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, CreateTargetGroupCommand, CreateRuleCommand, DescribeTargetGroupsCommand, AddListenerCertificatesCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
+import { ElasticLoadBalancingV2Client, DescribeLoadBalancersCommand, DescribeListenersCommand, CreateTargetGroupCommand, CreateRuleCommand, DescribeTargetGroupsCommand, AddListenerCertificatesCommand, DescribeRulesCommand, ModifyRuleCommand } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ACMClient, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand } from "@aws-sdk/client-acm";
 const region = process.env.AWS_REGION || "us-east-1";
 
@@ -310,8 +310,8 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   } catch (ruleErr: any) {
     // If priority is taken or rule exists, update it to point to the new TG
     const rulesRes = await elbClient.send(new DescribeRulesCommand({ ListenerArn: httpsListenerArn }));
-    const existingRule = rulesRes.Rules?.find(r => 
-      r.Conditions?.some(c => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
+    const existingRule = rulesRes.Rules?.find((r: any) => 
+      r.Conditions?.some((c: any) => c.Field === "host-header" && c.HostHeaderConfig?.Values?.includes(`${sanitizedName}.bravocloud.tech`))
     );
     if (existingRule) {
       await elbClient.send(new ModifyRuleCommand({
@@ -344,7 +344,7 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   }
 
   // 6. Create or Recreate Service with port in name
-  const serviceName = `bc-svc-${sanitizedName}-${port}`;
+  // 6. Create or Recreate Service with port in name
   const createServiceInput = {
     cluster: clusterName,
     serviceName: serviceName,
@@ -401,7 +401,7 @@ export async function deployToECS(projectName: string, imageUri: string, envVars
   return `${sanitizedName}.bravocloud.tech`;
 }
 
-export async function addCustomDomainRoute(projectName: string, domain: string): Promise<{ certArn: string, cnameName: string, cnameValue: string, albDns: string }> {
+export async function addCustomDomainRoute(projectName: string, domain: string, port: string = "3000"): Promise<{ certArn: string, cnameName: string, cnameValue: string, albDns: string }> {
   const { ACMClient, RequestCertificateCommand, DescribeCertificateCommand, DeleteCertificateCommand } = require("@aws-sdk/client-acm");
   const { AddListenerCertificatesCommand } = require("@aws-sdk/client-elastic-load-balancing-v2");
   const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
@@ -951,6 +951,7 @@ export async function updateProjectWAF(projectName: string, mode: string, ips: s
 export async function setupCognitoUserPool(): Promise<{ poolId: string, domain: string }> {
   const { CognitoIdentityProviderClient, ListUserPoolsCommand, CreateUserPoolCommand, CreateUserPoolDomainCommand } = require("@aws-sdk/client-cognito-identity-provider");
   const client = new CognitoIdentityProviderClient({ region });
+  const poolName = "bravocloud-auth-pool";
   const accountId = await getAwsAccountId();
   const domainPrefix = `bravocloud-auth-${accountId || 'demo'}`;
 

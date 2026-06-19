@@ -719,7 +719,7 @@ router.post('/:id/domains', verifyToken, async (req: any, res: any) => {
     }
 
     const { addCustomDomainRoute } = require('../lib/aws');
-    const { certArn, cnameName, cnameValue, albDns } = await addCustomDomainRoute(projectData.name, domain);
+    const { certArn, cnameName, cnameValue, albDns } = await addCustomDomainRoute(projectData.name, domain, (projectData.port || 3000).toString());
 
     const newDomain = {
       domain,
