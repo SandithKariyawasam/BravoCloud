@@ -1048,6 +1048,8 @@ env:
     WEBHOOK_URL: "${webhookUrl}"
     DEPLOYMENT_ID: "${deploymentId}"
     ECR_URI: "${ecrUri}"
+  exported-variables:
+    - COMMIT_HASH
 phases:
   pre_build:
     commands:
