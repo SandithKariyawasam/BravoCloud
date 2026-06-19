@@ -6,7 +6,7 @@ export function generateDockerfile(framework: string, installCmd?: string, build
 
   if (normalized.includes('next.js')) {
     return `# Next.js Dockerfile
-FROM node:20-alpine AS base
+FROM public.ecr.aws/docker/library/node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
@@ -38,7 +38,7 @@ CMD ["node", "server.js"]
   if (normalized.includes('react') || normalized.includes('vite') || normalized.includes('vue') || normalized.includes('svelte') || normalized.includes('angular')) {
     const finalOutputDir = outputDir || 'dist';
     return `# Static Site Dockerfile
-FROM node:20-alpine AS builder
+FROM public.ecr.aws/docker/library/node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 RUN ${finalInstallCmd}
@@ -46,7 +46,7 @@ COPY . .
 RUN ${finalBuildCmd}
 RUN if [ -d "${finalOutputDir}" ]; then mv ${finalOutputDir} _bravocloud_out; elif [ -d "dist" ]; then mv dist _bravocloud_out; elif [ -d "build" ]; then mv build _bravocloud_out; else mkdir _bravocloud_out; fi
 
-FROM nginx:alpine
+FROM public.ecr.aws/docker/library/nginx:alpine
 COPY --from=builder /app/_bravocloud_out /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
@@ -58,7 +58,7 @@ CMD ["nginx", "-g", "daemon off;"]
     // For python, build command might be optional, but if specified, run it
     const pyBuildStep = buildCmd ? `RUN ${buildCmd}` : '';
     return `# Python Dockerfile
-FROM python:3.11-slim
+FROM public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
 COPY requirements.txt ./
 RUN ${pyInstallCmd}
@@ -71,7 +71,7 @@ CMD ["python", "main.py"]
 
   // Generic Node fallback
   return `# Generic Node.js Dockerfile
-FROM node:18-alpine
+FROM public.ecr.aws/docker/library/node:18-alpine
 WORKDIR /app
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 RUN ${finalInstallCmd}
