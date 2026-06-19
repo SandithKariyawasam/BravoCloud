@@ -22,46 +22,52 @@ export async function getAwsAccountId(): Promise<string> {
 
 async function getOrCreateEcsExecutionRole(): Promise<string> {
   const roleName = "ecsTaskExecutionRole";
+  let roleArn = "";
   
   try {
     const roleResponse = await iamClient.send(new GetRoleCommand({ RoleName: roleName }));
-    return roleResponse.Role?.Arn || "";
+    roleArn = roleResponse.Role?.Arn || "";
   } catch (error: any) {
     if (error.name !== "NoSuchEntityException") {
       throw error;
     }
+    
+    // Create role
+    const trustPolicy = {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Effect: "Allow",
+          Principal: {
+            Service: "ecs-tasks.amazonaws.com"
+          },
+          Action: "sts:AssumeRole"
+        }
+      ]
+    };
+
+    const createRoleRes = await iamClient.send(new CreateRoleCommand({
+      RoleName: roleName,
+      AssumeRolePolicyDocument: JSON.stringify(trustPolicy)
+    }));
+
+    roleArn = createRoleRes.Role?.Arn || "";
   }
 
-  // Create role
-  const trustPolicy = {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Principal: {
-          Service: "ecs-tasks.amazonaws.com"
-        },
-        Action: "sts:AssumeRole"
-      }
-    ]
-  };
+  // Always attempt to attach the policy to guarantee permissions
+  try {
+    await iamClient.send(new AttachRolePolicyCommand({
+      RoleName: roleName,
+      PolicyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+    }));
+  } catch (e: any) {
+    console.log("Policy attachment status:", e.message);
+  }
 
-  const createRoleRes = await iamClient.send(new CreateRoleCommand({
-    RoleName: roleName,
-    AssumeRolePolicyDocument: JSON.stringify(trustPolicy)
-  }));
+  // Wait briefly for IAM propagation if we just created/modified it
+  await new Promise(resolve => setTimeout(resolve, 3000));
 
-  const roleArn = createRoleRes.Role?.Arn;
-
-  await iamClient.send(new AttachRolePolicyCommand({
-    RoleName: roleName,
-    PolicyArn: "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-  }));
-
-  // Wait briefly for role to propagate
-  await new Promise(resolve => setTimeout(resolve, 5000));
-
-  return roleArn || "";
+  return roleArn;
 }
 
 async function getOrCreateCodeBuildRole(): Promise<string> {
