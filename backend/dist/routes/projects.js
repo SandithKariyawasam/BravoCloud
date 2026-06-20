@@ -5,8 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const firebase_1 = require("../lib/firebase");
-const templates_1 = require("../lib/templates");
-const github_1 = require("../lib/github");
 const aws_1 = require("../lib/aws");
 const middleware_1 = require("../lib/middleware");
 // @ts-ignore
@@ -78,7 +76,7 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
         await deploymentRef.set(deploymentData);
         let ecrUri = '';
         try {
-            ecrUri = await (0, aws_1.createEcrRepository)(projectData.name);
+            ecrUri = await (0, aws_1.createEcrRepository)(projectData.name, userId);
         }
         catch (awsError) {
             console.error('Failed to create AWS ECR Repository:', awsError);
@@ -89,57 +87,23 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
         const host = req.headers.host;
         const dynamicBackendUrl = `${protocol}://${host}`;
         const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
-        const dockerfileContent = (0, templates_1.generateDockerfile)(framework, installCommand, buildCommand, outputDirectory);
-        const workflowContent = (0, templates_1.generateWorkflow)(webhookUrl, projectRef.id, deploymentRef.id, ecrUri, branch, rootDir);
-        // Make sure Dockerfile goes into the correct root directory
-        let dockerfilePath = 'Dockerfile';
-        if (rootDir !== './') {
-            dockerfilePath = `${rootDir.substring(2)}/Dockerfile`;
-        }
-        const filesToCommit = [
-            { path: dockerfilePath, content: dockerfileContent },
-            {
-                path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore',
-                content: 'node_modules\n.next\n.git\n.env*\n'
-            },
-            { path: '.github/workflows/bravocloud.yml', content: workflowContent }
-        ];
         let finalDeploymentData = { ...deploymentData };
         try {
-            // Inject AWS credentials into the user's repository secrets
-            if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-                try {
-                    await (0, github_1.setupRepositorySecrets)(user.githubToken, repoOwner, repoName, {
-                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY
-                    });
-                    console.log(`[Secrets] Injected AWS credentials into ${repoOwner}/${repoName}`);
-                }
-                catch (secretErr) {
-                    console.error(`[Secrets] Failed to inject AWS credentials:`, secretErr);
-                    // We can proceed, but the GitHub action will fail.
-                }
-            }
-            // Commit files to the user's repository
-            const commit = await (0, github_1.commitProjectFiles)(user.githubToken, repoOwner, repoName, filesToCommit, branch);
-            // Update deployment with actual commit hash and status
+            const { startCodeBuildJob } = require('../lib/aws');
+            await startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId);
             finalDeploymentData.status = 'BUILDING';
-            finalDeploymentData.commitHash = commit.sha;
-            await deploymentRef.update({
-                status: 'BUILDING',
-                commitHash: commit.sha
-            });
+            // We don't have a commit hash yet, but we can set it later if needed or leave it as initial-commit
+            await deploymentRef.update({ status: 'BUILDING' });
         }
-        catch (githubError) {
-            console.error('Failed to commit to GitHub:', githubError);
+        catch (awsError) {
+            console.error('Failed to trigger CodeBuild:', awsError);
             finalDeploymentData.status = 'FAILED';
             await deploymentRef.update({ status: 'FAILED' });
-            // We still return 201 because the project was created, but with a warning.
             return res.status(201).json({
                 success: true,
                 project: projectData,
                 deployment: finalDeploymentData,
-                warning: `Project created but failed to commit files to GitHub: ${githubError.message || githubError.toString()}`
+                warning: `Project created but failed to start build process: ${awsError.message || awsError.toString()}`
             });
         }
         res.status(201).json({ success: true, project: projectData, deployment: finalDeploymentData });
@@ -240,6 +204,40 @@ router.get('/:id', middleware_1.verifyToken, async (req, res) => {
         }
         const { getEcsTaskPublicIp } = require('../lib/aws');
         const taskIp = await getEcsTaskPublicIp(project.name);
+        if (project.storage && project.storage.length > 0) {
+            let updatedStorage = false;
+            const { RDSClient, DescribeDBInstancesCommand } = require("@aws-sdk/client-rds");
+            const { ElastiCacheClient, DescribeCacheClustersCommand } = require("@aws-sdk/client-elasticache");
+            const region = process.env.AWS_REGION || 'us-east-1';
+            for (const item of project.storage) {
+                if (item.status === 'Provisioning') {
+                    try {
+                        if (item.type === 'postgres') {
+                            const rdsClient = new RDSClient({ region });
+                            const res = await rdsClient.send(new DescribeDBInstancesCommand({ DBInstanceIdentifier: item.id }));
+                            if (res.DBInstances && res.DBInstances.length > 0 && res.DBInstances[0].DBInstanceStatus === 'available') {
+                                item.status = 'Active';
+                                updatedStorage = true;
+                            }
+                        }
+                        else if (item.type === 'redis') {
+                            const cacheClient = new ElastiCacheClient({ region });
+                            const res = await cacheClient.send(new DescribeCacheClustersCommand({ CacheClusterId: item.id }));
+                            if (res.CacheClusters && res.CacheClusters.length > 0 && res.CacheClusters[0].CacheClusterStatus === 'available') {
+                                item.status = 'Active';
+                                updatedStorage = true;
+                            }
+                        }
+                    }
+                    catch (e) {
+                        console.error(`Failed to check AWS status for ${item.id}:`, e.message);
+                    }
+                }
+            }
+            if (updatedStorage) {
+                await firebase_1.db.collection('projects').doc(projectId).update({ storage: project.storage });
+            }
+        }
         let latestCommitMessage = 'Deployed via BravoCloud';
         try {
             if (project.repoUrl && req.user.githubToken) {
@@ -328,7 +326,7 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
         // Get ECR URI gracefully (returns existing without error)
         let ecrUri = '';
         try {
-            ecrUri = await (0, aws_1.createEcrRepository)(projectData.name);
+            ecrUri = await (0, aws_1.createEcrRepository)(projectData.name, userId);
         }
         catch (awsError) {
             console.error('Failed to get AWS ECR Repository:', awsError);
@@ -339,38 +337,15 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
         const host = req.headers.host;
         const dynamicBackendUrl = `${protocol}://${host}`;
         const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
-        const dockerfileContent = (0, templates_1.generateDockerfile)(projectData.framework, projectData.installCommand, projectData.buildCommand, projectData.outputDirectory);
-        const workflowContent = (0, templates_1.generateWorkflow)(webhookUrl, projectData.id, deploymentRef.id, ecrUri, projectData.branch || 'main', projectData.rootDir || './');
-        let dockerfilePath = 'Dockerfile';
-        const rootDir = projectData.rootDir || './';
-        if (rootDir !== './') {
-            dockerfilePath = `${rootDir.substring(2)}/Dockerfile`;
-        }
-        const filesToCommit = [
-            { path: dockerfilePath, content: dockerfileContent },
-            {
-                path: rootDir !== './' ? `${rootDir.substring(2)}/.dockerignore` : '.dockerignore',
-                content: 'node_modules\n.next\n.git\n.env*\n'
-            },
-            { path: '.github/workflows/bravocloud.yml', content: workflowContent }
-        ];
-        // Push files to GitHub
         try {
-            if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
-                try {
-                    await (0, github_1.setupRepositorySecrets)(user.githubToken, repoOwner, repoName, {
-                        AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-                        AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY
-                    });
-                }
-                catch (secretErr) { }
-            }
-            await (0, github_1.commitProjectFiles)(user.githubToken, repoOwner, repoName, filesToCommit, projectData.branch || 'main', `Redeploy BravoCloud project ${projectData.name}`);
+            const { startCodeBuildJob } = require('../lib/aws');
+            await startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId);
+            await deploymentRef.update({ status: 'BUILDING' });
         }
-        catch (githubError) {
-            console.error('Failed to commit redeploy files:', githubError);
+        catch (awsError) {
+            console.error('Failed to trigger CodeBuild:', awsError);
             await deploymentRef.update({ status: 'FAILED' });
-            return res.status(500).json({ error: 'Failed to trigger redeployment on GitHub' });
+            return res.status(500).json({ error: 'Failed to trigger redeployment on AWS CodeBuild' });
         }
         res.json({ message: 'Redeployment triggered successfully', deployment: deploymentData });
     }
@@ -424,7 +399,7 @@ router.post('/:id/deployments/:deploymentId/rollback', middleware_1.verifyToken,
                 const { getAwsAccountId, deployToECS, getEcsTaskPublicIp } = require('../lib/aws');
                 const ecrRepoName = `bravocloud-${projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
                 const region = process.env.AWS_REGION || "us-east-1";
-                const accountId = process.env.AWS_ACCOUNT_ID || await getAwsAccountId();
+                const accountId = await getAwsAccountId();
                 // Pass the exact commitHash instead of 'latest'
                 const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:${targetDeploymentData.commitHash}`;
                 const envs = projectData.envVars ? projectData.envVars : undefined;
@@ -583,6 +558,500 @@ router.get('/:id/logs/runtime', middleware_1.verifyToken, async (req, res) => {
     catch (error) {
         console.error('Error fetching runtime logs:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Update environment variables
+router.patch('/:id/env', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const { envVars } = req.body;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        if (typeof envVars !== 'object' || Array.isArray(envVars)) {
+            return res.status(400).json({ error: 'envVars must be an object' });
+        }
+        await projectRef.update({ envVars });
+        res.json({ success: true, envVars });
+    }
+    catch (error) {
+        console.error('Error updating env vars:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+// Add custom domain
+router.post('/:id/domains', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const { domain } = req.body;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        if (!domain)
+            return res.status(400).json({ error: 'Domain is required' });
+        const currentDomains = projectData.domains || [];
+        if (currentDomains.find((d) => d.domain === domain)) {
+            return res.status(400).json({ error: 'Domain already added to this project' });
+        }
+        const { addCustomDomainRoute } = require('../lib/aws');
+        const { certArn, cnameName, cnameValue, albDns } = await addCustomDomainRoute(projectData.name, domain, (projectData.port || 3000).toString());
+        const newDomain = {
+            domain,
+            certArn,
+            cnameName,
+            cnameValue,
+            albDns,
+            status: 'Pending Verification'
+        };
+        const updatedDomains = [...currentDomains, newDomain];
+        await projectRef.update({ domains: updatedDomains });
+        res.json({ success: true, domains: updatedDomains });
+    }
+    catch (error) {
+        console.error('Error adding domain:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Remove a custom domain
+router.delete('/:id/domains/:domain', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId, domain } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        const currentDomains = projectData.domains || [];
+        const domainRecord = currentDomains.find((d) => d.domain === domain);
+        if (domainRecord) {
+            if (domainRecord.certArn) {
+                const { removeCustomDomainRoute } = require('../lib/aws');
+                await removeCustomDomainRoute(domainRecord.certArn);
+            }
+            const updatedDomains = currentDomains.filter((d) => d.domain !== domain);
+            await projectRef.update({ domains: updatedDomains });
+            res.json({ success: true, domains: updatedDomains });
+        }
+        else {
+            res.status(404).json({ error: 'Domain not found on this project' });
+        }
+    }
+    catch (error) {
+        console.error('Error removing domain:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Add storage
+router.post('/:id/storage', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const { type } = req.body;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        const currentStorage = projectData.storage || [];
+        let newStorageResource = null;
+        const currentEnvVars = projectData.envVars || {};
+        let newEnvVars = { ...currentEnvVars };
+        const { provisionS3Bucket, provisionPostgresDatabase, provisionRedisCache } = require('../lib/aws');
+        if (type === 's3') {
+            const { bucketName, region } = await provisionS3Bucket(projectData.name, userId);
+            newStorageResource = { id: bucketName, type: 's3', name: bucketName, status: 'Active', region };
+            newEnvVars['AWS_S3_BUCKET_NAME'] = bucketName;
+            newEnvVars['AWS_REGION'] = region;
+        }
+        else if (type === 'postgres') {
+            const { dbIdentifier, username, password, mockEndpoint } = await provisionPostgresDatabase(projectData.name, userId);
+            newStorageResource = { id: dbIdentifier, type: 'postgres', name: dbIdentifier, status: 'Provisioning', endpoint: mockEndpoint };
+            newEnvVars['POSTGRES_URL'] = `postgresql://${username}:${password}@${mockEndpoint}:5432/postgres`;
+            newEnvVars['POSTGRES_USER'] = username;
+            newEnvVars['POSTGRES_PASSWORD'] = password;
+        }
+        else if (type === 'redis') {
+            const { clusterId, mockEndpoint } = await provisionRedisCache(projectData.name, userId);
+            newStorageResource = { id: clusterId, type: 'redis', name: clusterId, status: 'Provisioning', endpoint: mockEndpoint };
+            newEnvVars['REDIS_URL'] = `redis://${mockEndpoint}:6379`;
+        }
+        else {
+            return res.status(400).json({ error: 'Invalid storage type' });
+        }
+        const updatedStorage = [...currentStorage, newStorageResource];
+        await projectRef.update({
+            storage: updatedStorage,
+            envVars: newEnvVars
+        });
+        res.json({ success: true, storage: updatedStorage, envVars: newEnvVars });
+    }
+    catch (error) {
+        console.error('Error adding storage:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Remove storage
+router.delete('/:id/storage/:storageId', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId, storageId } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        const currentStorage = projectData.storage || [];
+        const itemToDelete = currentStorage.find((s) => s.id === storageId);
+        if (itemToDelete) {
+            const { deleteStorageResource } = require('../lib/aws');
+            await deleteStorageResource(itemToDelete);
+        }
+        const updatedStorage = currentStorage.filter((s) => s.id !== storageId);
+        await projectRef.update({ storage: updatedStorage });
+        res.json({ success: true, storage: updatedStorage });
+    }
+    catch (error) {
+        console.error('Error removing storage:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Update workflow YAML
+router.patch('/:id/workflow', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id: projectId } = req.params;
+        const { workflowYaml } = req.body;
+        if (typeof workflowYaml !== 'string') {
+            return res.status(400).json({ error: 'workflowYaml must be a string' });
+        }
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        await projectRef.update({ workflowYaml });
+        res.json({ success: true, workflowYaml });
+    }
+    catch (error) {
+        console.error('Error updating workflow:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Update project metadata
+router.patch('/:id', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const updates = req.body;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        // Filter allowed fields
+        const allowedFields = [
+            'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
+            'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs', 'edgeNetwork',
+            'maintenanceMode', 'isPaused', 'ownerEmail', 'autoScaling', 'logDrain'
+        ];
+        const filteredUpdates = {};
+        for (const key of allowedFields) {
+            if (updates[key] !== undefined) {
+                filteredUpdates[key] = updates[key] === "" ? null : updates[key];
+            }
+        }
+        if (Object.keys(filteredUpdates).length > 0) {
+            await projectRef.update(filteredUpdates);
+            // If WAF settings were updated, trigger the AWS WAF sync
+            if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {
+                const { updateProjectWAF } = require('../lib/aws');
+                const mode = filteredUpdates.ipAccessMode || projectData.ipAccessMode || 'allow_all';
+                const ips = filteredUpdates.ipList || projectData.ipList || [];
+                // Run asynchronously
+                updateProjectWAF(projectData.name, mode, ips).catch((e) => console.error("WAF update failed:", e));
+            }
+            // If Password Protection settings were updated, trigger Cognito/ALB Auth sync
+            if (filteredUpdates.passwordProtection !== undefined || filteredUpdates.accessPassword !== undefined) {
+                const { syncProjectCognitoAuth, updateProjectALBAuth } = require('../lib/aws');
+                const isEnabled = filteredUpdates.passwordProtection ?? projectData.passwordProtection ?? false;
+                const password = filteredUpdates.accessPassword ?? projectData.accessPassword ?? '';
+                // Run asynchronously
+                (async () => {
+                    try {
+                        let clientId;
+                        if (isEnabled && password) {
+                            const res = await syncProjectCognitoAuth(projectData.name, password);
+                            clientId = res.clientId;
+                        }
+                        await updateProjectALBAuth(projectData.name, isEnabled && !!password, clientId);
+                    }
+                    catch (e) {
+                        console.error("Cognito/ALB Auth sync failed:", e.message);
+                    }
+                })();
+            }
+            // If Serverless Functions were updated, trigger sync
+            if (filteredUpdates.serverlessFunctions !== undefined) {
+                const { syncServerlessFunctions } = require('../lib/aws');
+                syncServerlessFunctions(projectData.name, filteredUpdates.serverlessFunctions).catch((e) => console.error("Serverless sync failed:", e));
+            }
+            // If Cron Jobs were updated, trigger sync
+            if (filteredUpdates.cronJobs !== undefined) {
+                const { syncCronJobs } = require('../lib/aws');
+                syncCronJobs(projectData.name, filteredUpdates.cronJobs).catch((e) => console.error("Cron Jobs sync failed:", e));
+            }
+            // If Edge Network was updated, trigger sync
+            if (filteredUpdates.edgeNetwork !== undefined) {
+                const { syncEdgeNetwork } = require('../lib/aws');
+                syncEdgeNetwork(projectData.name, filteredUpdates.edgeNetwork).catch((e) => console.error("Edge Network sync failed:", e));
+            }
+            // If Maintenance Mode was updated, trigger sync
+            if (filteredUpdates.maintenanceMode !== undefined) {
+                const { setMaintenanceMode } = require('../lib/aws');
+                setMaintenanceMode(projectData.name, filteredUpdates.maintenanceMode).catch((e) => console.error("Maintenance sync failed:", e));
+            }
+            // If Pause State was updated, trigger sync
+            if (filteredUpdates.isPaused !== undefined) {
+                const { setProjectComputeState } = require('../lib/aws');
+                setProjectComputeState(projectData.name, filteredUpdates.isPaused).catch((e) => console.error("Compute state sync failed:", e));
+            }
+            // If Auto-Scaling was updated, trigger sync
+            if (filteredUpdates.autoScaling !== undefined) {
+                const { syncAutoScaling } = require('../lib/aws');
+                syncAutoScaling(projectData.name, filteredUpdates.autoScaling).catch((e) => console.error("AutoScaling sync failed:", e));
+            }
+            // If Log Drain was updated, trigger sync
+            if (filteredUpdates.logDrain !== undefined) {
+                const { syncLogDrain } = require('../lib/aws');
+                syncLogDrain(projectData.name, filteredUpdates.logDrain).catch((e) => console.error("Log drain sync failed:", e));
+            }
+        }
+        const updatedDoc = await projectRef.get();
+        res.json({ message: 'Project updated', project: { id: updatedDoc.id, ...updatedDoc.data() } });
+    }
+    catch (error) {
+        console.error('Error updating project:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// Trigger a manual database snapshot
+router.post('/:id/snapshot', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const projectRef = firebase_1.db.collection('projects').doc(id);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        const projectData = projectDoc.data();
+        if (projectData.userId !== req.user.uid) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+        const { createDatabaseSnapshot } = require('../lib/aws');
+        await createDatabaseSnapshot(projectData.name);
+        res.json({ message: 'Snapshot successfully initiated' });
+    }
+    catch (error) {
+        console.error('Error creating snapshot:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// Get repository branches
+router.get('/:id/branches', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const projectDoc = await firebase_1.db.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        if (!projectData.repoUrl)
+            return res.json({ branches: [] });
+        const userDoc = await firebase_1.db.collection('users').doc(userId).get();
+        const user = userDoc.data();
+        if (!user?.githubToken)
+            return res.status(400).json({ error: 'GitHub token not found' });
+        const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+        const owner = urlParts[0];
+        const repo = urlParts[1];
+        const { Octokit } = require('@octokit/rest');
+        const octokit = new Octokit({ auth: user.githubToken });
+        const branchesRes = await octokit.rest.repos.listBranches({ owner, repo, per_page: 100 });
+        const branches = branchesRes.data.map((b) => b.name);
+        res.json({ branches });
+    }
+    catch (error) {
+        console.error('Error fetching branches:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Get repository directories
+router.get('/:id/directories', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const pathQuery = req.query.path || '';
+        const projectDoc = await firebase_1.db.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        if (!projectData.repoUrl)
+            return res.json({ directories: [] });
+        const userDoc = await firebase_1.db.collection('users').doc(userId).get();
+        const user = userDoc.data();
+        if (!user?.githubToken)
+            return res.status(400).json({ error: 'GitHub token not found' });
+        const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+        const owner = urlParts[0];
+        const repo = urlParts[1];
+        const { Octokit } = require('@octokit/rest');
+        const octokit = new Octokit({ auth: user.githubToken });
+        // Remove leading './' or '/' for GitHub API
+        const cleanPath = pathQuery.replace(/^\.?\//, '');
+        const contentRes = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: cleanPath,
+            ref: projectData.branch || 'main'
+        });
+        let directories = [];
+        if (Array.isArray(contentRes.data)) {
+            directories = contentRes.data.filter((item) => item.type === 'dir').map((item) => item.name);
+        }
+        res.json({ directories });
+    }
+    catch (error) {
+        // If path is not found (e.g., deleted), return empty
+        if (error.status === 404) {
+            return res.json({ directories: [] });
+        }
+        console.error('Error fetching directories:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Auto-detect serverless functions
+router.get('/:id/detect-functions', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const projectDoc = await firebase_1.db.collection('projects').doc(projectId).get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        if (!projectData.repoUrl)
+            return res.json({ functions: [] });
+        const userDoc = await firebase_1.db.collection('users').doc(userId).get();
+        const user = userDoc.data();
+        if (!user?.githubToken)
+            return res.status(400).json({ error: 'GitHub token not found' });
+        const urlParts = projectData.repoUrl.replace('https://github.com/', '').replace('.git', '').split('/');
+        const owner = urlParts[0];
+        const repo = urlParts[1];
+        const { Octokit } = require('@octokit/rest');
+        const octokit = new Octokit({ auth: user.githubToken });
+        // Look for functions in `api` or `src/api` directory
+        let rootDir = projectData.rootDir || './';
+        let apiPath = rootDir === './' ? 'api' : `${rootDir.replace(/^\.\//, '')}/api`;
+        let contentRes;
+        try {
+            contentRes = await octokit.rest.repos.getContent({
+                owner,
+                repo,
+                path: apiPath,
+                ref: projectData.branch || 'main'
+            });
+        }
+        catch (e) {
+            if (e.status === 404) {
+                return res.json({ functions: [] });
+            }
+            throw e;
+        }
+        const functions = [];
+        if (Array.isArray(contentRes.data)) {
+            for (const item of contentRes.data) {
+                if (item.type === 'file' && (item.name.endsWith('.js') || item.name.endsWith('.ts'))) {
+                    const name = item.name.replace(/\.(js|ts)$/, '');
+                    functions.push({
+                        id: `func_${Math.random().toString(36).substr(2, 9)}`,
+                        name: name,
+                        handler: `${apiPath}/${item.name}`,
+                        runtime: 'nodejs20.x',
+                        memory: 128,
+                        timeout: 10
+                    });
+                }
+            }
+        }
+        res.json({ functions });
+    }
+    catch (error) {
+        console.error('Error detecting functions:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+// Delete project
+router.delete('/:id', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const projectId = req.params.id;
+        const userId = req.user.id;
+        const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        const projectDoc = await projectRef.get();
+        if (!projectDoc.exists)
+            return res.status(404).json({ error: 'Project not found' });
+        const projectData = projectDoc.data();
+        if (projectData.userId !== userId)
+            return res.status(403).json({ error: 'Unauthorized' });
+        // 1. Delete AWS Infrastructure
+        const { deleteProjectInfrastructure } = require('../lib/aws');
+        try {
+            await deleteProjectInfrastructure(projectData.name, projectData.storage || []);
+        }
+        catch (awsError) {
+            console.error('Error during AWS teardown:', awsError);
+            // We log but continue deletion to ensure BravoCloud state is cleaned up
+        }
+        // 2. Delete Project Document
+        await projectRef.delete();
+        // 3. Delete Deployments
+        const deploymentsSnapshot = await firebase_1.db.collection('deployments').where('projectId', '==', projectId).get();
+        const batch = firebase_1.db.batch();
+        deploymentsSnapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        res.json({ success: true });
+    }
+    catch (error) {
+        console.error('Error deleting project:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });
 exports.default = router;

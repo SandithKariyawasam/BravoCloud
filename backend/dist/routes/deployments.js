@@ -64,26 +64,35 @@ router.post('/webhook', async (req, res) => {
         await deploymentRef.update(updateData);
         const updatedDoc = await deploymentRef.get();
         const updatedDeployment = updatedDoc.data();
-        // If the build succeeded, push to App Runner
-        if (status === 'SUCCESS' && projectId) {
-            const projectRef = firebase_1.db.collection('projects').doc(projectId);
+        // If the build succeeded, push to App Runner/ECS
+        const actualProjectId = projectId || (updatedDeployment && updatedDeployment.projectId);
+        if (status === 'SUCCESS' && actualProjectId) {
+            const projectRef = firebase_1.db.collection('projects').doc(actualProjectId);
             const projectDoc = await projectRef.get();
             if (projectDoc.exists) {
                 const project = projectDoc.data();
                 try {
                     const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
                     const region = process.env.AWS_REGION || "us-east-1";
-                    const accountId = process.env.AWS_ACCOUNT_ID || await (0, aws_1.getAwsAccountId)();
+                    const accountId = await (0, aws_1.getAwsAccountId)();
                     const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
                     const envs = project.envVars ? project.envVars : undefined;
-                    const ecsUrl = await (0, aws_1.deployToECS)(project.name, imageUri, envs);
+                    const framework = (project.framework || "").toLowerCase();
+                    let targetPort = "3000";
+                    if (framework.includes("react") || framework.includes("vite") || framework.includes("vue") || framework.includes("svelte") || framework.includes("angular")) {
+                        targetPort = "80";
+                    }
+                    else if (framework.includes("python") || framework.includes("django") || framework.includes("flask") || framework.includes("fastapi")) {
+                        targetPort = "8000";
+                    }
+                    const ecsUrl = await (0, aws_1.deployToECS)(project.name, imageUri, envs, targetPort);
                     console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
                     // Wait briefly for the new task to stabilize, then get its IP
                     await new Promise(r => setTimeout(r, 10000));
                     const { getEcsTaskPublicIp } = require('../lib/aws');
                     const taskIp = await getEcsTaskPublicIp(project.name);
                     // Store the live URL and new IP on the project document
-                    const updatePayload = {};
+                    const updatePayload = { port: parseInt(targetPort) };
                     if (ecsUrl) {
                         updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
                     }
