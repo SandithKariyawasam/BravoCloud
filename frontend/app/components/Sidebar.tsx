@@ -232,7 +232,10 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
                   handleSelect("main", setActiveItem, "Usage");
                   router.push('/dashboard/usage');
                 }} q={q} category="Main" />
-                <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => handleSelect("main", setActiveItem, "Support")} q={q} category="Main" />
+                <SidebarItem icon={<LifeBuoy size={16} />} label="Support" active={!q && view === "main" && activeItem === "Support"} onClick={() => {
+                  handleSelect("main", setActiveItem, "Support");
+                  router.push('/dashboard/support');
+                }} q={q} category="Main" />
               </>
             )}
             <SidebarItem icon={<Settings size={16} />} label="Settings" active={!q && view === "main" && activeItem === "Settings"} hasArrow onClick={() => {

@@ -823,18 +823,7 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
       }
     }
 
-    try {
-      const tgRes = await elbClient.send(new DescribeTargetGroupsCommand({ Names: [tgName] }));
-      const tgArn = tgRes.TargetGroups?.[0]?.TargetGroupArn;
-      if (tgArn) {
-        await elbClient.send(new DeleteTargetGroupCommand({ TargetGroupArn: tgArn }));
-        console.log(`Deleted Target Group: ${tgName}`);
-      }
-    } catch (e: any) {
-      if (e.name !== "TargetGroupNotFoundException") {
-        console.warn(`Failed to delete Target Group ${tgName}:`, e.message);
-      }
-    }
+
   } catch (e: any) {
     console.warn(`Failed to delete ALB Rules/Target Group for ${sanitizedName}:`, e.message);
   }
