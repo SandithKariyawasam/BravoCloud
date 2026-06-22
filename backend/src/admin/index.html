@@ -34,9 +34,14 @@
         <h2 id="chat-title" class="font-semibold text-lg">Select a user</h2>
         <p id="chat-subtitle" class="text-xs text-[#a1a1aa]">...</p>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-        <span class="text-xs font-medium text-green-500">Live</span>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          <span class="text-xs font-medium text-green-500">Live</span>
+        </div>
+        <button id="end-chat-btn" onclick="terminateChat()" class="text-xs px-3 py-1.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-md border border-red-500/20 transition-colors">
+          End Chat
+        </button>
       </div>
     </div>
 
@@ -83,6 +88,24 @@
         const rooms = await res.json();
         
         let changed = false;
+        const activeRoomIds = new Set(rooms.map(r => r.roomId));
+
+        // Remove deleted rooms
+        Object.keys(chats).forEach(roomId => {
+          if (!activeRoomIds.has(roomId)) {
+            delete chats[roomId];
+            changed = true;
+            if (currentRoom === roomId) {
+              currentRoom = null;
+              emptyState.classList.remove('hidden');
+              chatHeader.classList.add('hidden');
+              chatHeader.classList.remove('flex');
+              messagesContainer.classList.add('hidden');
+              chatInputArea.classList.add('hidden');
+            }
+          }
+        });
+
         rooms.forEach(r => {
           if (!chats[r.roomId] || chats[r.roomId].lastMessage !== r.lastMessage) {
             chats[r.roomId] = { ...chats[r.roomId], userName: r.userName || r.roomId, lastMessage: r.lastMessage };
@@ -198,6 +221,35 @@
         })
       });
     };
+
+    async function terminateChat() {
+      if (!currentRoom) return;
+      if (!confirm('Are you sure you want to end this chat? This will delete the chat history.')) return;
+
+      const roomToDelete = currentRoom;
+      
+      // Optimistically clean up UI
+      delete chats[roomToDelete];
+      currentRoom = null;
+      
+      emptyState.classList.remove('hidden');
+      chatHeader.classList.add('hidden');
+      chatHeader.classList.remove('flex');
+      messagesContainer.classList.add('hidden');
+      chatInputArea.classList.add('hidden');
+      
+      renderUserList();
+
+      try {
+        await fetch(`${apiUrl}/api/chat?roomId=${roomToDelete}`, {
+          method: 'DELETE'
+        });
+        // Force refresh rooms
+        fetchRooms();
+      } catch (err) {
+        alert('Failed to terminate chat');
+      }
+    }
 
   </script>
 </body>

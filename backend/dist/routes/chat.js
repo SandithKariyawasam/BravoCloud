@@ -76,4 +76,28 @@ router.get('/admin/rooms', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch rooms' });
     }
 });
+// DELETE /api/chat
+// Terminate a chat session
+router.delete('/', async (req, res) => {
+    try {
+        const { roomId } = req.query;
+        if (!roomId)
+            return res.status(400).json({ error: 'Missing roomId' });
+        // Delete all messages in the room
+        const messagesSnapshot = await firebase_1.db.collection('live_chats').doc(roomId).collection('messages').get();
+        const batch = firebase_1.db.batch();
+        messagesSnapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        // Delete the room document itself
+        const roomRef = firebase_1.db.collection('live_chats').doc(roomId);
+        batch.delete(roomRef);
+        await batch.commit();
+        res.status(200).json({ message: 'Chat terminated successfully' });
+    }
+    catch (err) {
+        console.error('Error terminating chat:', err);
+        res.status(500).json({ error: 'Failed to terminate chat' });
+    }
+});
 exports.default = router;

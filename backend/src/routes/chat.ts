@@ -79,4 +79,32 @@ router.get('/admin/rooms', async (req: any, res: any) => {
   }
 });
 
+// DELETE /api/chat
+// Terminate a chat session
+router.delete('/', async (req: any, res: any) => {
+  try {
+    const { roomId } = req.query;
+    if (!roomId) return res.status(400).json({ error: 'Missing roomId' });
+
+    // Delete all messages in the room
+    const messagesSnapshot = await db.collection('live_chats').doc(roomId as string).collection('messages').get();
+    const batch = db.batch();
+    
+    messagesSnapshot.docs.forEach((doc: any) => {
+      batch.delete(doc.ref);
+    });
+    
+    // Delete the room document itself
+    const roomRef = db.collection('live_chats').doc(roomId as string);
+    batch.delete(roomRef);
+
+    await batch.commit();
+
+    res.status(200).json({ message: 'Chat terminated successfully' });
+  } catch (err: any) {
+    console.error('Error terminating chat:', err);
+    res.status(500).json({ error: 'Failed to terminate chat' });
+  }
+});
+
 export default router;

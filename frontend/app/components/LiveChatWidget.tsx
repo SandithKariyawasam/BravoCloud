@@ -27,6 +27,10 @@ export default function LiveChatWidget({ user }: { user: any }) {
         const data = await res.json();
         
         setMessages((prev) => {
+          if (data.length === 0 && prev.length > 0) {
+            // Chat was terminated
+            return [];
+          }
           if (data.length > prev.length) {
             // Auto open if agent replies (last message is from admin)
             const lastMsg = data[data.length - 1];
