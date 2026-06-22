@@ -440,37 +440,7 @@ export default function GlobalSettingsPage() {
                 </div>
               </section>
 
-              {/* Billing */}
-              <section className="bg-[#09090b] border border-[#27272a] rounded-xl overflow-hidden shadow-lg p-6">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-1">
-                      <CreditCard size={18} className="text-green-400" /> Billing & Usage
-                    </h3>
-                    <p className="text-[#a1a1aa] text-sm mb-6 max-w-2xl">
-                      Manage your subscription tier and payment methods.
-                    </p>
-                  </div>
-                  <span className="bg-green-500/10 text-green-400 border border-green-500/20 px-3 py-1 rounded-full text-sm font-medium">
-                    {user.billingPlan}
-                  </span>
-                </div>
 
-                <div className="bg-[#121214] border border-[#27272a] rounded-lg p-6 flex flex-col items-center justify-center text-center gap-4">
-                  <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center text-green-400">
-                    <CreditCard size={32} />
-                  </div>
-                  <div>
-                    <h4 className="text-white font-medium text-lg">You are on the Free Hobby Plan</h4>
-                    <p className="text-[#a1a1aa] text-sm max-w-md mx-auto mt-2">
-                      Upgrade to Pro to unlock increased compute limits, 99.9% SLA, and priority support.
-                    </p>
-                  </div>
-                  <button className="mt-2 bg-white hover:bg-gray-200 text-black px-6 py-2 rounded-lg font-medium transition-colors text-sm">
-                    Upgrade to Pro
-                  </button>
-                </div>
-              </section>
 
             </div>
           </div>

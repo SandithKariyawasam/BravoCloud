@@ -143,6 +143,8 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
         setActiveSettingsItem("Edge Network");
       } else if (pathname.endsWith('/advanced')) {
         setActiveSettingsItem("Advanced");
+      } else if (pathname.endsWith('/billing')) {
+        setActiveSettingsItem("Billing");
       } else {
         setActiveSettingsItem("General");
       }
@@ -387,6 +389,9 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                     if (item === "Cron Jobs") router.push(`/dashboard/project/${projectId}/settings/cron`);
                     if (item === "Edge Network") router.push(`/dashboard/project/${projectId}/settings/edge`);
                     if (item === "Advanced") router.push(`/dashboard/project/${projectId}/settings/advanced`);
+                  } else {
+                    if (item === "General") router.push(`/dashboard/settings`);
+                    if (item === "Billing") router.push(`/dashboard/settings/billing`);
                   }
                 }}
                 q={q}

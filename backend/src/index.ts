@@ -12,6 +12,7 @@ import usageRoutes from './routes/usage';
 import userRoutes from './routes/user';
 import supportRoutes from './routes/support';
 import chatRoutes from './routes/chat';
+import billingRoutes from './routes/billing';
 import { db } from './lib/firebase';
 import path from 'path';
 
@@ -41,6 +42,7 @@ app.use('/api/usage', usageRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/billing', billingRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });

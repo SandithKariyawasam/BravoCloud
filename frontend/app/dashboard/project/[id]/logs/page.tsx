@@ -14,20 +14,27 @@ export default function LogsPage() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"build" | "runtime">("build");
-  const [buildJobs, setBuildJobs] = useState<any[]>([]);
-  const [buildRawLog, setBuildRawLog] = useState<string>("");
   const [runtimeLogs, setRuntimeLogs] = useState<any[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   // Auto-scroll to bottom of logs
   useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (autoScroll && scrollContainerRef.current) {
+      // Use scrollTop instead of scrollIntoView to prevent yanking parent scroll containers
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [buildJobs, runtimeLogs, activeTab]);
+  }, [runtimeLogs, autoScroll]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    // Allow a small 50px buffer to account for rounding errors
+    const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50;
+    setAutoScroll(isAtBottom);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("bravocloud_token");
@@ -57,12 +64,6 @@ export default function LogsPage() {
 
     // Try to load cached logs too
     try {
-      const cachedBuild = localStorage.getItem(`bravocloud_logs_cache_${projectId}_build`);
-      if (cachedBuild) {
-        const parsed = JSON.parse(cachedBuild);
-        if (parsed.jobs) setBuildJobs(parsed.jobs);
-        if (parsed.rawLog) setBuildRawLog(parsed.rawLog);
-      }
       const cachedRuntime = localStorage.getItem(`bravocloud_logs_cache_${projectId}_runtime`);
       if (cachedRuntime) {
         const parsed = JSON.parse(cachedRuntime);
@@ -107,30 +108,15 @@ export default function LogsPage() {
     // Polling logic for logs
     const fetchLogs = async () => {
       try {
-        if (activeTab === "build") {
-          const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/build`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setBuildJobs(data.jobs || []);
-            setBuildRawLog(data.rawLog || "");
-            localStorage.setItem(`bravocloud_logs_cache_${projectId}_build`, JSON.stringify({
-              jobs: data.jobs || [],
-              rawLog: data.rawLog || ""
-            }));
-          }
-        } else {
-          const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
-            headers: { "Authorization": `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setRuntimeLogs(data.logs || []);
-            localStorage.setItem(`bravocloud_logs_cache_${projectId}_runtime`, JSON.stringify({
-              logs: data.logs || []
-            }));
-          }
+        const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setRuntimeLogs(data.logs || []);
+          localStorage.setItem(`bravocloud_logs_cache_${projectId}_runtime`, JSON.stringify({
+            logs: data.logs || []
+          }));
         }
       } catch (err) {
         console.error("Error fetching logs", err);
@@ -141,7 +127,7 @@ export default function LogsPage() {
     const interval = setInterval(fetchLogs, 3000); // Poll every 3 seconds
 
     return () => clearInterval(interval);
-  }, [projectId, activeTab]);
+  }, [projectId]);
 
   if (loading) {
     return (
@@ -189,30 +175,14 @@ export default function LogsPage() {
                   <h1 className="text-3xl font-bold tracking-tight">Logs</h1>
                 </div>
                 <p className="text-[#a1a1aa] max-w-2xl text-sm">
-                  View build and runtime logs for {project.name}.
+                  View CloudWatch runtime logs for {project.name}.
                 </p>
               </div>
-            </div>
-            
-            {/* Tabs */}
-            <div className="flex bg-[#18181b] border border-[#27272a] p-1 rounded-xl">
-              <button 
-                onClick={() => setActiveTab('build')}
-                className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'build' ? 'bg-[#27272a] text-white shadow-sm' : 'text-[#a1a1aa] hover:text-white'}`}
-              >
-                Build Logs (GitHub)
-              </button>
-              <button 
-                onClick={() => setActiveTab('runtime')}
-                className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'runtime' ? 'bg-[#27272a] text-white shadow-sm' : 'text-[#a1a1aa] hover:text-white'}`}
-              >
-                Runtime Logs (AWS)
-              </button>
             </div>
           </div>
 
           {/* Logs Terminal Window */}
-          <div className="flex-1 min-h-[400px] bg-[#09090b] border border-[#27272a] rounded-xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col relative before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent before:pointer-events-none">
+          <div className="h-[calc(100vh-220px)] min-h-[400px] bg-[#09090b] border border-[#27272a] rounded-xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col relative before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent before:pointer-events-none">
             
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#27272a] bg-[#18181b] shrink-0 relative z-10">
               <div className="flex items-center gap-3">
@@ -220,7 +190,7 @@ export default function LogsPage() {
                   <svg className="w-4 h-4 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l3 3-3 3m5 0h3M4 17h16a2 2 0 002-2V9a2 2 0 00-2-2H4a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
                 </div>
                 <div className="text-xs font-mono text-[#a1a1aa] tracking-widest uppercase">
-                  {activeTab === 'build' ? 'GITHUB_ACTIONS // BUILD_STREAM' : 'AWS_CLOUDWATCH // RUNTIME_STREAM'}
+                  CLOUDWATCH // RUNTIME_STREAM
                 </div>
               </div>
               
@@ -233,60 +203,48 @@ export default function LogsPage() {
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-6 font-mono text-sm text-[#e4e4e7] custom-sidebar-scrollbar whitespace-pre-wrap">
+            <div 
+              ref={scrollContainerRef}
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-6 font-mono text-sm text-[#e4e4e7] custom-sidebar-scrollbar whitespace-pre-wrap relative"
+            >
               
-              {activeTab === 'build' && (
-                <div className="flex flex-col gap-4">
-                  {buildRawLog ? (
-                    <div className="font-mono text-sm text-[#e4e4e7] whitespace-pre-wrap break-all">
-                      {buildRawLog}
+              <div className="flex flex-col">
+                {runtimeLogs.length === 0 ? (
+                  <div className="text-[#71717a] italic">Waiting for runtime logs...</div>
+                ) : (
+                  runtimeLogs.map((log: any, idx: number) => (
+                    <div key={idx} className="flex gap-4 hover:bg-[#27272a]/30 px-2 py-0.5 rounded">
+                      <span className="text-[#71717a] w-24 shrink-0" suppressHydrationWarning>
+                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
+                      </span>
+                      <span className="flex-1 break-all">
+                        {log.message.includes('Error') || log.message.includes('Exception') || log.message.includes('WARN') 
+                          ? <span className="text-[#ef4444]">{log.message}</span> 
+                          : log.message}
+                      </span>
                     </div>
-                  ) : buildJobs.length === 0 ? (
-                    <div className="text-[#71717a] italic">Waiting for build logs...</div>
-                  ) : (
-                    buildJobs.map((job: any) => (
-                      <div key={job.id} className="flex flex-col gap-1">
-                        <div className="font-bold text-[#3b82f6] mb-2">▶ Job: {job.name} ({job.status})</div>
-                        {job.steps?.map((step: any, idx: number) => (
-                          <div key={idx} className="flex gap-4">
-                            <span className="text-[#71717a] w-20 shrink-0" suppressHydrationWarning>
-                              {step.started_at ? new Date(step.started_at).toLocaleTimeString([], { hour12: false }) : '--:--:--'}
-                            </span>
-                            <span className={`flex-1 ${step.status === 'in_progress' ? 'text-[#eab308] animate-pulse' : step.conclusion === 'failure' ? 'text-[#ef4444]' : 'text-[#e4e4e7]'}`}>
-                              {step.name}
-                            </span>
-                            <span className="text-[#71717a] w-20 text-right shrink-0">
-                              {step.conclusion === 'success' ? '✓ DONE' : step.conclusion === 'failure' ? '✗ FAIL' : step.status === 'in_progress' ? '...' : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'runtime' && (
-                <div className="flex flex-col">
-                  {runtimeLogs.length === 0 ? (
-                    <div className="text-[#71717a] italic">Waiting for runtime logs...</div>
-                  ) : (
-                    runtimeLogs.map((log: any, idx: number) => (
-                      <div key={idx} className="flex gap-4 hover:bg-[#27272a]/30 px-2 py-0.5 rounded">
-                        <span className="text-[#71717a] w-24 shrink-0" suppressHydrationWarning>
-                          {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
-                        </span>
-                        <span className="flex-1 break-all">
-                          {log.message.includes('Error') || log.message.includes('Exception') || log.message.includes('WARN') 
-                            ? <span className="text-[#ef4444]">{log.message}</span> 
-                            : log.message}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
               <div ref={logsEndRef} />
+              
+              {!autoScroll && (
+                <button 
+                  onClick={() => {
+                    setAutoScroll(true);
+                    if (scrollContainerRef.current) {
+                      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+                    }
+                  }}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#27272a]/80 backdrop-blur border border-[#3f3f46] text-white px-3 py-1.5 rounded-full text-xs flex items-center gap-2 hover:bg-[#3f3f46] transition-colors shadow-lg z-20 cursor-pointer"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+                  </svg>
+                  Resume Auto-Scroll
+                </button>
+              )}
             </div>
           </div>
           
