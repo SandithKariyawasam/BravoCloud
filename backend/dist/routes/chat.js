@@ -6,6 +6,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const firebase_1 = require("../lib/firebase");
 const router = express_1.default.Router();
+const FORBIDDEN_WORDS = ['fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'bastard', 'whore', 'slut', 'faggot', 'nigger', 'nigga', 'retard'];
+function filterText(text) {
+    let filtered = text;
+    FORBIDDEN_WORDS.forEach(word => {
+        // Replace whole words case-insensitively with asterisks
+        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        filtered = filtered.replace(regex, '*'.repeat(word.length));
+    });
+    return filtered;
+}
 // GET /api/chat?roomId=USER_ID
 // Fetch messages for a specific room
 router.get('/', async (req, res) => {
@@ -33,11 +43,12 @@ router.post('/', async (req, res) => {
         const { roomId, senderId, senderName, text, isAdmin } = req.body;
         if (!roomId || !text)
             return res.status(400).json({ error: 'Missing roomId or text' });
+        const sanitizedText = filterText(text);
         const message = {
             roomId,
             senderId: senderId || 'admin',
             senderName: senderName || (isAdmin ? 'Support Agent' : 'User'),
-            text,
+            text: sanitizedText,
             isAdmin: !!isAdmin,
             timestamp: new Date().toISOString()
         };
@@ -45,7 +56,7 @@ router.post('/', async (req, res) => {
         await firebase_1.db.collection('live_chats').doc(roomId).collection('messages').add(message);
         // Update room metadata for admin dashboard
         await firebase_1.db.collection('live_chats').doc(roomId).set({
-            lastMessage: text,
+            lastMessage: sanitizedText,
             lastActive: message.timestamp,
             userId: roomId,
             ...(!isAdmin && senderName ? { userName: senderName } : {})
