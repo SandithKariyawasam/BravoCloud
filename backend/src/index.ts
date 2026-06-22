@@ -11,16 +11,13 @@ import speedInsightsRoutes from './routes/speedInsights';
 import usageRoutes from './routes/usage';
 import userRoutes from './routes/user';
 import supportRoutes from './routes/support';
+import chatRoutes from './routes/chat';
 import { db } from './lib/firebase';
-import { createServer } from 'http';
-import { initializeSocket } from './socket';
 import path from 'path';
 
 dotenv.config();
 
 const app = express();
-const httpServer = createServer(app);
-const io = initializeSocket(httpServer);
 const PORT = process.env.PORT || 4000;
 
 app.use(cors({
@@ -43,6 +40,7 @@ app.use('/api/speed-insights', speedInsightsRoutes);
 app.use('/api/usage', usageRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/chat', chatRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
@@ -69,7 +67,7 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 if (process.env.NODE_ENV !== 'production') {
-  httpServer.listen(PORT, () => {
+  app.listen(PORT, () => {
     console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
   });
 }

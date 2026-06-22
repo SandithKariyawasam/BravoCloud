@@ -16,13 +16,10 @@ const speedInsights_1 = __importDefault(require("./routes/speedInsights"));
 const usage_1 = __importDefault(require("./routes/usage"));
 const user_1 = __importDefault(require("./routes/user"));
 const support_1 = __importDefault(require("./routes/support"));
-const http_1 = require("http");
-const socket_1 = require("./socket");
+const chat_1 = __importDefault(require("./routes/chat"));
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const httpServer = (0, http_1.createServer)(app);
-const io = (0, socket_1.initializeSocket)(httpServer);
 const PORT = process.env.PORT || 4000;
 app.use((0, cors_1.default)({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -40,6 +37,7 @@ app.use('/api/speed-insights', speedInsights_1.default);
 app.use('/api/usage', usage_1.default);
 app.use('/api/user', user_1.default);
 app.use('/api/support', support_1.default);
+app.use('/api/chat', chat_1.default);
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
 });
@@ -61,7 +59,7 @@ app.use((err, req, res, next) => {
     });
 });
 if (process.env.NODE_ENV !== 'production') {
-    httpServer.listen(PORT, () => {
+    app.listen(PORT, () => {
         console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
     });
 }

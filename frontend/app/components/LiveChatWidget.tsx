@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { io, Socket } from "socket.io-client";
 import { MessageSquare, X, Send, User } from "lucide-react";
 
 export default function LiveChatWidget({ user }: { user: any }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -20,41 +18,69 @@ export default function LiveChatWidget({ user }: { user: any }) {
     if (!user || !user.id) return;
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    const newSocket = io(apiUrl, { transports: ["websocket"] });
+    
+    let interval: NodeJS.Timeout;
 
-    newSocket.on("connect", () => {
-      newSocket.emit("join_room", { roomId: user.id });
-    });
-
-    newSocket.on("receive_message", (msg) => {
-      setMessages((prev) => [...prev, msg]);
-      
-      // Auto open if agent replies
-      if (msg.isAdmin && !isOpen) {
-        setIsOpen(true);
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/chat?roomId=${user.id}`);
+        const data = await res.json();
+        
+        setMessages((prev) => {
+          if (data.length > prev.length) {
+            // Auto open if agent replies (last message is from admin)
+            const lastMsg = data[data.length - 1];
+            if (lastMsg && lastMsg.isAdmin && !isOpen) {
+              setIsOpen(true);
+            }
+            return data;
+          }
+          return prev;
+        });
+      } catch (err) {
+        // silently fail on polling error
       }
-    });
+    };
 
-    setSocket(newSocket);
+    // Initial fetch
+    fetchMessages();
+
+    // Poll every 3 seconds
+    interval = setInterval(fetchMessages, 3000);
 
     return () => {
-      newSocket.disconnect();
+      clearInterval(interval);
     };
-  }, [user]);
+  }, [user, isOpen]);
 
-  const sendMessage = (e: React.FormEvent) => {
+  const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !socket || !user) return;
-
-    socket.emit("send_message", {
-      roomId: user.id,
-      senderId: user.id,
-      senderName: user.name || user.githubId || "User",
-      text: input.trim(),
-      isAdmin: false,
-    });
+    const text = input.trim();
+    if (!text || !user) return;
 
     setInput("");
+
+    // Optimistic update
+    const optMsg = { text, isAdmin: false, senderName: user.name || user.githubId || "User", timestamp: new Date().toISOString() };
+    setMessages(prev => [...prev, optMsg]);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    
+    try {
+      await fetch(`${apiUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: user.id,
+          senderId: user.id,
+          senderName: user.name || user.githubId || "User",
+          text,
+          isAdmin: false,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send message", err);
+    }
   };
 
   if (!user) return null;
