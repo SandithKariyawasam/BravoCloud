@@ -33,7 +33,42 @@ const BYOKIcon = () => (
   </div>
 );
 
-export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLogout }: SidebarProps) {
+export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdownOpen, setIsDropdownOpen: propSetIsDropdownOpen, onLogout: propOnLogout }: SidebarProps) {
+  const [internalUser, setInternalUser] = useState<UserProfile | null>(null);
+  const [internalIsDropdownOpen, setInternalIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (!propUser && typeof window !== 'undefined') {
+      const cachedData = localStorage.getItem("bravocloud_dashboard_cache");
+      if (cachedData) {
+        try {
+          const parsed = JSON.parse(cachedData);
+          if (parsed.user) setInternalUser(parsed.user);
+        } catch (e) {}
+      }
+    }
+  }, [propUser]);
+
+  const user = propUser || internalUser;
+  const isDropdownOpen = propSetIsDropdownOpen ? propIsDropdownOpen : internalIsDropdownOpen;
+  const setIsDropdownOpen = propSetIsDropdownOpen || setInternalIsDropdownOpen;
+
+  const handleLogout = async () => {
+    if (propOnLogout) {
+      propOnLogout();
+      return;
+    }
+    try {
+      localStorage.removeItem("bravocloud_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+      await fetch(`${apiUrl}/auth/logout`, { method: "POST" });
+      window.location.href = "/";
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+  const onLogout = handleLogout;
+
   const pathname = usePathname();
   const router = useRouter();
   const isProjectView = pathname?.includes('/dashboard/project/');
@@ -365,7 +400,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       {/* USER PROFILE FOOTER */}
       {user && (
         <div className="p-4 border-t border-[#27272a]/40 bg-black relative">
-          {isDropdownOpen && setIsDropdownOpen && onLogout && (
+          {isDropdownOpen && (
             <div className="absolute bottom-full left-4 mb-2 w-56 bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl z-50 overflow-hidden">
               <button
                 onClick={onLogout}
@@ -380,7 +415,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
           )}
 
           <div
-            onClick={() => setIsDropdownOpen && setIsDropdownOpen(!isDropdownOpen)}
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center gap-3 px-3 py-2 bg-[#18181b]/50 border border-[#27272a] rounded-xl hover:bg-[#27272a] transition-colors cursor-pointer group"
           >
             <div className="w-9 h-9 rounded-full overflow-hidden border border-[#3f3f46] group-hover:border-white transition-colors flex-shrink-0">

@@ -6,7 +6,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const firebase_1 = require("../lib/firebase");
 const router = express_1.default.Router();
-const FORBIDDEN_WORDS = ['fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'bastard', 'whore', 'slut', 'faggot', 'nigger', 'nigga', 'retard'];
+const FORBIDDEN_WORDS = [
+    'anal', 'anus', 'arse', 'arsehole', 'ass', 'assbag', 'assclown', 'asshat', 'asshole', 'asswipe',
+    'ballbag', 'balls', 'ballsack', 'bastard', 'bellend', 'bestiality', 'bimbo', 'bitch', 'blowjob', 'bollocks',
+    'boob', 'boobs', 'bullshit', 'buttplug', 'chode', 'clit', 'clitoris', 'cock', 'cockblock', 'cockface',
+    'cockhead', 'cockmunch', 'cocksucker', 'crap', 'cum', 'cumguzzler', 'cumshot', 'cumstain', 'cunt', 'dick',
+    'dildo', 'dipshit', 'dogshit', 'douche', 'douchebag', 'dumbass', 'dyke', 'ejaculate', 'fag', 'faggot',
+    'fatass', 'filth', 'foreskin', 'fuck', 'fuckbag', 'fuckboy', 'fucker', 'fuckface', 'fuckhead', 'fucking',
+    'fucktard', 'fuckwad', 'fuckwit', 'goddamn', 'handjob', 'hardon', 'hentai', 'homo', 'hooker', 'horseshit',
+    'incel', 'jackass', 'jackoff', 'jerkoff', 'jizz', 'knob', 'knobhead', 'labia', 'lameass', 'lesbo',
+    'masturbate', 'milf', 'minger', 'motherfucker', 'motherfucking', 'munter', 'necrophilia', 'nigga', 'nigger', 'nutsack',
+    'paedo', 'pecker', 'pedo', 'pedophile', 'piss', 'pissed', 'pissflaps', 'pisshead', 'porn', 'porno',
+    'prick', 'pube', 'pubes', 'pussy', 'queer', 'retard', 'rimjob', 'schlong', 'scrotum', 'shag',
+    'shemale', 'shit', 'shite', 'shithead', 'shitting', 'shitstain', 'skank', 'slapper', 'slut', 'smegma',
+    'snatch', 'testicle', 'tits', 'titties', 'tosser', 'tranny', 'twat', 'vagina', 'wank', 'wanker',
+    'whore'
+];
 function filterText(text) {
     let filtered = text;
     FORBIDDEN_WORDS.forEach(word => {

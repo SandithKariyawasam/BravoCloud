@@ -669,13 +669,8 @@ async function getRealAWSUsage(userId) {
     }
     catch (error) {
         console.warn("Real AWS Cost Explorer query failed or returned empty (fallback to baseline simulation):", error.message);
-        // Fallback baseline data if CE is not enabled or populated yet
-        return [
-            { service: "Amazon Elastic Compute Cloud - Compute", cost: 14.50 },
-            { service: "Amazon Relational Database Service", cost: 22.00 },
-            { service: "Amazon Simple Storage Service", cost: 3.10 },
-            { service: "AWS Data Transfer", cost: 8.40 }
-        ];
+        // Fallback if CE is not enabled or populated yet. Return empty array instead of dummy data.
+        return [];
     }
 }
 async function deleteProjectInfrastructure(projectName, storageItems) {
