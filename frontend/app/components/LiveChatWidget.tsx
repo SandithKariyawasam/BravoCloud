@@ -8,6 +8,22 @@ export default function LiveChatWidget({ user }: { user: any }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isInitialLoad = useRef(true);
+
+  // Restore open state from sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = sessionStorage.getItem("bravocloud_chat_open");
+      if (stored === "true") setIsOpen(true);
+    }
+  }, []);
+
+  // Sync open state to sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("bravocloud_chat_open", String(isOpen));
+    }
+  }, [isOpen]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -26,6 +42,8 @@ export default function LiveChatWidget({ user }: { user: any }) {
         const res = await fetch(`${apiUrl}/api/chat?roomId=${user.id}`);
         const data = await res.json();
         
+        const isInitial = isInitialLoad.current;
+
         setMessages((prev) => {
           if (data.length === 0 && prev.length > 0) {
             // Chat was terminated
@@ -34,13 +52,15 @@ export default function LiveChatWidget({ user }: { user: any }) {
           if (data.length > prev.length) {
             // Auto open if agent replies (last message is from admin)
             const lastMsg = data[data.length - 1];
-            if (lastMsg && lastMsg.isAdmin && !isOpen) {
+            if (!isInitial && lastMsg && lastMsg.isAdmin && !isOpen) {
               setIsOpen(true);
             }
             return data;
           }
           return prev;
         });
+        
+        isInitialLoad.current = false;
       } catch (err) {
         // silently fail on polling error
       }
