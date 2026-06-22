@@ -16,8 +16,13 @@ const speedInsights_1 = __importDefault(require("./routes/speedInsights"));
 const usage_1 = __importDefault(require("./routes/usage"));
 const user_1 = __importDefault(require("./routes/user"));
 const support_1 = __importDefault(require("./routes/support"));
+const http_1 = require("http");
+const socket_1 = require("./socket");
+const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
+const httpServer = (0, http_1.createServer)(app);
+const io = (0, socket_1.initializeSocket)(httpServer);
 const PORT = process.env.PORT || 4000;
 app.use((0, cors_1.default)({
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -41,6 +46,10 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
+// Admin chat dashboard
+app.get('/admin/chat', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, 'admin', 'index.html'));
+});
 // Global error handler for debugging
 app.use((err, req, res, next) => {
     console.error('Fatal Error:', err);
@@ -52,7 +61,7 @@ app.use((err, req, res, next) => {
     });
 });
 if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
         console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
     });
 }

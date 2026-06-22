@@ -10,6 +10,7 @@ import {
   Sparkles, Circle, ListTodo, Wrench, ListOrdered, KeyRound, UserRound,
   Puzzle, BarChart3, MessageSquare
 } from "lucide-react";
+import LiveChatWidget from "./LiveChatWidget";
 
 interface UserProfile {
   id: string;
@@ -46,6 +47,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
   const isStoragePage = pathname?.endsWith('/storage');
   const isWorkflowsPage = pathname?.endsWith('/workflows');
   const isUsagePage = pathname?.endsWith('/usage');
+  const isSupportPage = pathname?.endsWith('/support');
   const isSettingsPage = pathname?.includes('/settings');
   
   const [view, setView] = useState<"main" | "observability" | "ai-gateway" | "settings">(isSettingsPage ? "settings" : "main");
@@ -60,8 +62,9 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
     if (isStoragePage) return "Storage";
     if (isWorkflowsPage) return "Workflows";
     if (isUsagePage) return "Usage";
+    if (isSupportPage) return "Support";
     if (isSettingsPage) return "Settings";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSettingsPage)) {
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSupportPage && !isSettingsPage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -88,6 +91,8 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       setActiveItem("Workflows");
     } else if (isUsagePage) {
       setActiveItem("Usage");
+    } else if (isSupportPage) {
+      setActiveItem("Support");
     } else if (isSettingsPage) {
       setActiveItem("Settings");
       setView("settings");
@@ -106,10 +111,10 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
       } else {
         setActiveSettingsItem("General");
       }
-    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSettingsPage)) {
+    } else if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSupportPage && !isSettingsPage)) {
       setActiveItem(isProjectView ? "Overview" : "Projects");
     }
-  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isUsagePage, isProjectView, isSettingsPage]);
+  }, [pathname, isDeploymentsPage, isLogsPage, isAnalyticsPage, isSpeedInsightsPage, isEnvPage, isDomainsPage, isStoragePage, isWorkflowsPage, isUsagePage, isSupportPage, isProjectView, isSettingsPage]);
   const [activeObsItem, setActiveObsItem] = useState<string>("Overview");
   const [activeAIItem, setActiveAIItem] = useState<string>("Overview");
   const [activeSettingsItem, setActiveSettingsItem] = useState<string>("General");
@@ -394,6 +399,7 @@ export default function Sidebar({ user, isDropdownOpen, setIsDropdownOpen, onLog
           </div>
         </div>
       )}
+      <LiveChatWidget user={user} />
     </div>
   );
 }

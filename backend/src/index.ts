@@ -12,10 +12,15 @@ import usageRoutes from './routes/usage';
 import userRoutes from './routes/user';
 import supportRoutes from './routes/support';
 import { db } from './lib/firebase';
+import { createServer } from 'http';
+import { initializeSocket } from './socket';
+import path from 'path';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = initializeSocket(httpServer);
 const PORT = process.env.PORT || 4000;
 
 app.use(cors({
@@ -47,6 +52,11 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Admin chat dashboard
+app.get('/admin/chat', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+});
+
 // Global error handler for debugging
 app.use((err: any, req: any, res: any, next: any) => {
   console.error('Fatal Error:', err);
@@ -59,7 +69,7 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
   });
 }
