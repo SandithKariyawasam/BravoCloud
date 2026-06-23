@@ -64,4 +64,105 @@ router.delete('/:id', middleware_1.verifyToken, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// --- AGENT DAEMON ENDPOINTS ---
+// These do not use verifyToken because the agent passes its generated token in the body.
+const findAgentByToken = async (token) => {
+    const usersSnapshot = await firebase_1.db.collection('users').get();
+    for (const userDoc of usersSnapshot.docs) {
+        const agentsSnapshot = await firebase_1.db.collection('users').doc(userDoc.id).collection('agents').where('token', '==', token).get();
+        if (!agentsSnapshot.empty) {
+            return { userId: userDoc.id, agentId: agentsSnapshot.docs[0].id, agent: agentsSnapshot.docs[0].data() };
+        }
+    }
+    return null;
+};
+// POST /api/agents/poll
+router.post('/poll', async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token)
+            return res.status(400).json({ error: 'Token is required' });
+        const agentData = await findAgentByToken(token);
+        if (!agentData)
+            return res.status(401).json({ error: 'Invalid token' });
+        // Update agent status to online and lastSeen
+        await firebase_1.db.collection('users').doc(agentData.userId).collection('agents').doc(agentData.agentId).update({
+            status: 'Online',
+            lastSeen: new Date().toISOString()
+        });
+        // Check for pending jobs
+        const jobsSnapshot = await firebase_1.db.collection('users').doc(agentData.userId).collection('agent_jobs')
+            .where('agentId', '==', agentData.agentId)
+            .where('status', '==', 'Pending')
+            .limit(1)
+            .get();
+        if (jobsSnapshot.empty) {
+            return res.json({ job: null });
+        }
+        const jobDoc = jobsSnapshot.docs[0];
+        await jobDoc.ref.update({ status: 'InProgress', startedAt: new Date().toISOString() });
+        res.json({ job: { id: jobDoc.id, ...jobDoc.data() } });
+    }
+    catch (error) {
+        console.error('Error polling agent:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// POST /api/agents/logs
+router.post('/logs', async (req, res) => {
+    try {
+        const { token, jobId, log } = req.body;
+        const agentData = await findAgentByToken(token);
+        if (!agentData)
+            return res.status(401).json({ error: 'Invalid token' });
+        await firebase_1.db.collection('users').doc(agentData.userId).collection('agent_jobs').doc(jobId).collection('logs').add({
+            log,
+            timestamp: new Date().toISOString()
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+// POST /api/agents/complete
+router.post('/complete', async (req, res) => {
+    try {
+        const { token, jobId, status } = req.body;
+        const agentData = await findAgentByToken(token);
+        if (!agentData)
+            return res.status(401).json({ error: 'Invalid token' });
+        await firebase_1.db.collection('users').doc(agentData.userId).collection('agent_jobs').doc(jobId).update({
+            status, // 'Success' or 'Failed'
+            completedAt: new Date().toISOString()
+        });
+        // Set agent back to Online (idle) instead of InProgress
+        await firebase_1.db.collection('users').doc(agentData.userId).collection('agents').doc(agentData.agentId).update({
+            status: 'Online'
+        });
+        res.json({ success: true });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+// --- ADMIN TEST ENDPOINTS ---
+// POST /api/agents/admin/queue-job
+router.post('/admin/queue-job', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { agentId, repository } = req.body;
+        const newJob = {
+            agentId,
+            repository: repository || 'https://github.com/example/repo',
+            status: 'Pending',
+            createdAt: new Date().toISOString()
+        };
+        const docRef = await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
+        res.json({ message: 'Job queued successfully', jobId: docRef.id });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 exports.default = router;
