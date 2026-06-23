@@ -239,7 +239,7 @@ router.get('/install-agent.sh', (req: any, res: any) => {
 
   const backendUrl = req.protocol + '://' + req.get('host');
 
-  const script = \`#!/bin/bash
+  const script = `#!/bin/bash
 echo -e "\\e[36mBravoCloud Linux/Mac Agent Installer\\e[0m"
 echo -e "\\e[36m====================================\\e[0m"
 
@@ -261,7 +261,7 @@ echo -e "\\e[33mStarting Agent in background...\\e[0m"
 cd "$INSTALL_DIR"
 nohup node bravocloud-agent.js > agent.log 2>&1 &
 echo -e "\\e[32mBravoCloud Agent started. Waiting for jobs...\\e[0m"
-\`;
+`;
 
   res.setHeader('Content-Type', 'text/plain');
   res.send(script);
