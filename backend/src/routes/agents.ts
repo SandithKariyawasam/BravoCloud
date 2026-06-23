@@ -291,9 +291,13 @@ async function sendLog(jobId, logLine) {
 async function executeJob(job) {
   console.log("Received job:", job.id);
   const repo = job.repository;
-  const cloneCmd = \`git clone \${repo} repo_\${job.id} && cd repo_\${job.id} && npm install && npm run build\`;
+  const rootDir = job.rootDir && job.rootDir !== './' ? job.rootDir : '.';
+  const installCmd = job.installCommand || 'npm install';
+  const buildCmd = job.buildCommand || 'npm run build';
   
-  await sendLog(job.id, "Starting job. Cloning repository...");
+  const cloneCmd = \`git clone \${repo} repo_\${job.id} && cd repo_\${job.id} && cd "\${rootDir}" && \${installCmd} && \${buildCmd}\`;
+  
+  await sendLog(job.id, \`Starting job. Cloning repository and executing in \${rootDir}...\`);
   
   exec(cloneCmd, async (error, stdout, stderr) => {
     let status = "Success";

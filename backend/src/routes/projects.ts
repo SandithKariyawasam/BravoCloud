@@ -100,6 +100,9 @@ router.post('/', verifyToken, async (req: any, res: any) => {
         repository: projectData.repoUrl,
         deploymentId: deploymentRef.id,
         projectId: projectRef.id,
+        rootDir: projectData.rootDir,
+        installCommand: projectData.installCommand,
+        buildCommand: projectData.buildCommand,
         status: 'Pending',
         createdAt: new Date().toISOString()
       };
