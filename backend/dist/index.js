@@ -18,6 +18,7 @@ const user_1 = __importDefault(require("./routes/user"));
 const support_1 = __importDefault(require("./routes/support"));
 const chat_1 = __importDefault(require("./routes/chat"));
 const billing_1 = __importDefault(require("./routes/billing"));
+const agents_1 = __importDefault(require("./routes/agents"));
 const monthlyInvoices_1 = require("./jobs/monthlyInvoices");
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
@@ -41,6 +42,7 @@ app.use('/api/user', user_1.default);
 app.use('/api/support', support_1.default);
 app.use('/api/chat', chat_1.default);
 app.use('/api/billing', billing_1.default);
+app.use('/api/agents', agents_1.default);
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Welcome to BravoCloud API', status: 'running' });
 });

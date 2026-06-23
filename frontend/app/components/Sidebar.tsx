@@ -147,6 +147,8 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
         setActiveSettingsItem("Billing");
       } else if (pathname.endsWith('/invoices')) {
         setActiveSettingsItem("Invoices");
+      } else if (pathname.endsWith('/agent')) {
+        setActiveSettingsItem("Agent");
       } else {
         setActiveSettingsItem("General");
       }
@@ -395,6 +397,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                     if (item === "General") router.push(`/dashboard/settings`);
                     if (item === "Billing") router.push(`/dashboard/settings/billing`);
                     if (item === "Invoices") router.push(`/dashboard/settings/invoices`);
+                    if (item === "Agent") router.push(`/dashboard/settings/agent`);
                   }
                 }}
                 q={q}
