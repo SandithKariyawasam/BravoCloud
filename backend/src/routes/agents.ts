@@ -142,10 +142,22 @@ router.post('/complete', async (req: any, res: any) => {
     const agentData = await findAgentByToken(token);
     if (!agentData) return res.status(401).json({ error: 'Invalid token' });
 
-    await db.collection('users').doc(agentData.userId).collection('agent_jobs').doc(jobId).update({
+    const jobRef = db.collection('users').doc(agentData.userId).collection('agent_jobs').doc(jobId);
+    const jobDoc = await jobRef.get();
+    
+    await jobRef.update({
       status, // 'Success' or 'Failed'
       completedAt: new Date().toISOString()
     });
+
+    if (jobDoc.exists) {
+      const jobData = jobDoc.data();
+      if (jobData?.deploymentId) {
+        await db.collection('deployments').doc(jobData.deploymentId).update({
+          status: status === 'Success' ? 'SUCCESS' : 'FAILED'
+        });
+      }
+    }
 
     // Set agent back to Online (idle) instead of InProgress
     await db.collection('users').doc(agentData.userId).collection('agents').doc(agentData.agentId).update({

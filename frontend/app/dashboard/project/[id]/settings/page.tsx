@@ -22,6 +22,8 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
   const [outputDirectory, setOutputDirectory] = useState("");
   const [installCommand, setInstallCommand] = useState("");
   const [rootDir, setRootDir] = useState("./");
+  const [agentId, setAgentId] = useState("");
+  const [agents, setAgents] = useState<any[]>([]);
 
   // Root Directory Browser State
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
@@ -59,6 +61,7 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
           setOutputDirectory(data.project.outputDirectory || "");
           setInstallCommand(data.project.installCommand || "");
           setRootDir(data.project.rootDir || "./");
+          setAgentId(data.project.agentId || "");
           sessionStorage.setItem(`bravocloud_project_${projectId}`, JSON.stringify(data.project));
         }
         setLoading(false);
@@ -67,6 +70,15 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
         console.error(err);
         setLoading(false);
       });
+
+    fetch(`${apiUrl}/api/agents`, { headers: { "Authorization": `Bearer ${token}` } })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setAgents(data.agents || []);
+        }
+      })
+      .catch((err) => console.error(err));
   }, [projectId]);
 
   const handleSave = async () => {
@@ -83,7 +95,7 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          name, framework, buildCommand, outputDirectory, installCommand, rootDir
+          name, framework, buildCommand, outputDirectory, installCommand, rootDir, agentId
         })
       });
 
@@ -268,6 +280,23 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
                     <option value="nodejs">Node.js / Express</option>
                     <option value="html">Static HTML</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#e4e4e7] mb-2">Build Environment</label>
+                  <select
+                    value={agentId}
+                    onChange={(e) => setAgentId(e.target.value)}
+                    className="w-full bg-[#18181b] border border-[#3f3f46] text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 transition-colors appearance-none"
+                  >
+                    <option value="">BravoCloud Managed Infrastructure (Default)</option>
+                    {agents.map((agent: any) => (
+                      <option key={agent.id} value={agent.id}>
+                        Self-Hosted: {agent.name} ({agent.status})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-[#71717a] mt-2">Route intensive build jobs directly to your private self-hosted agents.</p>
                 </div>
 
                 <div className="relative">

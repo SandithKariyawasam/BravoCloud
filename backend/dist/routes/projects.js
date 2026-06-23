@@ -338,14 +338,30 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
         const dynamicBackendUrl = `${protocol}://${host}`;
         const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
         try {
-            const { startCodeBuildJob } = require('../lib/aws');
-            await startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId);
-            await deploymentRef.update({ status: 'BUILDING' });
+            if (projectData.agentId) {
+                // Route to self-hosted agent
+                const newJob = {
+                    agentId: projectData.agentId,
+                    projectId: projectData.id,
+                    deploymentId: deploymentRef.id,
+                    repository: projectData.repoUrl,
+                    status: 'Pending',
+                    createdAt: new Date().toISOString()
+                };
+                await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
+                await deploymentRef.update({ status: 'BUILDING' });
+            }
+            else {
+                // Route to AWS CodeBuild
+                const { startCodeBuildJob } = require('../lib/aws');
+                await startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId);
+                await deploymentRef.update({ status: 'BUILDING' });
+            }
         }
         catch (awsError) {
-            console.error('Failed to trigger CodeBuild:', awsError);
+            console.error('Failed to trigger deployment:', awsError);
             await deploymentRef.update({ status: 'FAILED' });
-            return res.status(500).json({ error: 'Failed to trigger redeployment on AWS CodeBuild' });
+            return res.status(500).json({ error: 'Failed to trigger deployment' });
         }
         res.json({ message: 'Redeployment triggered successfully', deployment: deploymentData });
     }
@@ -773,7 +789,7 @@ router.patch('/:id', middleware_1.verifyToken, async (req, res) => {
         const allowedFields = [
             'name', 'framework', 'buildCommand', 'outputDirectory', 'installCommand', 'rootDir', 'repoUrl', 'branch',
             'passwordProtection', 'accessPassword', 'ipAccessMode', 'ipList', 'serverlessFunctions', 'cronJobs', 'edgeNetwork',
-            'maintenanceMode', 'isPaused', 'ownerEmail', 'autoScaling', 'logDrain'
+            'maintenanceMode', 'isPaused', 'ownerEmail', 'autoScaling', 'logDrain', 'agentId'
         ];
         const filteredUpdates = {};
         for (const key of allowedFields) {
