@@ -210,6 +210,10 @@ if (-not (Test-Path $installDir)) {
     New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 }
 
+Write-Host "Stopping existing agent processes..." -ForegroundColor Yellow
+# Find and kill any node.exe process whose command line contains bravocloud-agent.js
+Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -match 'bravocloud-agent\\.js' } | Invoke-CimMethod -MethodName Terminate | Out-Null
+
 $scriptUrl = "${backendUrl}/api/agents/agent.js?token=${token}"
 $scriptPath = "$installDir\\bravocloud-agent.js"
 
@@ -235,9 +239,12 @@ router.get('/install-agent.sh', (req: any, res: any) => {
 
   const backendUrl = req.protocol + '://' + req.get('host');
 
-  const script = `#!/bin/bash
+  const script = \`#!/bin/bash
 echo -e "\\e[36mBravoCloud Linux/Mac Agent Installer\\e[0m"
 echo -e "\\e[36m====================================\\e[0m"
+
+echo -e "\\e[33mStopping existing agent processes...\\e[0m"
+pkill -f "node bravocloud-agent.js" || true
 
 INSTALL_DIR="$HOME/.bravocloud-agent"
 mkdir -p "$INSTALL_DIR"
@@ -254,7 +261,7 @@ echo -e "\\e[33mStarting Agent in background...\\e[0m"
 cd "$INSTALL_DIR"
 nohup node bravocloud-agent.js > agent.log 2>&1 &
 echo -e "\\e[32mBravoCloud Agent started. Waiting for jobs...\\e[0m"
-`;
+\`;
 
   res.setHeader('Content-Type', 'text/plain');
   res.send(script);
