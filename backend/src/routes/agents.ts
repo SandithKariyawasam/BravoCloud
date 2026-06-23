@@ -194,5 +194,158 @@ router.post('/admin/queue-job', verifyToken, async (req: any, res: any) => {
     res.status(500).json({ error: error.message });
   }
 });
+// GET /api/agents/install.ps1
+router.get('/install.ps1', (req: any, res: any) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(400).send("Error: Missing token query parameter");
+
+  const backendUrl = req.protocol + '://' + req.get('host');
+
+  const script = `
+Write-Host "BravoCloud Windows Agent Installer" -ForegroundColor Cyan
+Write-Host "==================================" -ForegroundColor Cyan
+
+$installDir = "$env:APPDATA\\BravoCloudAgent"
+if (-not (Test-Path $installDir)) {
+    New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+}
+
+$scriptUrl = "${backendUrl}/api/agents/agent.js?token=${token}"
+$scriptPath = "$installDir\\bravocloud-agent.js"
+
+Write-Host "Downloading agent script..." -ForegroundColor Yellow
+Invoke-WebRequest -Uri $scriptUrl -OutFile $scriptPath
+
+Write-Host "Agent installed to $installDir" -ForegroundColor Green
+Write-Host "Starting Agent in background..." -ForegroundColor Yellow
+
+Set-Location -Path $installDir
+Start-Process -NoNewWindow -FilePath "node" -ArgumentList "bravocloud-agent.js"
+Write-Host "BravoCloud Agent started. Waiting for jobs..." -ForegroundColor Green
+`;
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(script);
+});
+
+// GET /api/agents/install-agent.sh
+router.get('/install-agent.sh', (req: any, res: any) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(400).send("Error: Missing token query parameter");
+
+  const backendUrl = req.protocol + '://' + req.get('host');
+
+  const script = `#!/bin/bash
+echo -e "\\e[36mBravoCloud Linux/Mac Agent Installer\\e[0m"
+echo -e "\\e[36m====================================\\e[0m"
+
+INSTALL_DIR="$HOME/.bravocloud-agent"
+mkdir -p "$INSTALL_DIR"
+
+SCRIPT_URL="${backendUrl}/api/agents/agent.js?token=${token}"
+SCRIPT_PATH="$INSTALL_DIR/bravocloud-agent.js"
+
+echo -e "\\e[33mDownloading agent script...\\e[0m"
+curl -sSL "$SCRIPT_URL" -o "$SCRIPT_PATH"
+
+echo -e "\\e[32mAgent installed to $INSTALL_DIR\\e[0m"
+echo -e "\\e[33mStarting Agent in background...\\e[0m"
+
+cd "$INSTALL_DIR"
+nohup node bravocloud-agent.js > agent.log 2>&1 &
+echo -e "\\e[32mBravoCloud Agent started. Waiting for jobs...\\e[0m"
+`;
+
+  res.setHeader('Content-Type', 'text/plain');
+  res.send(script);
+});
+
+// GET /api/agents/agent.js
+router.get('/agent.js', (req: any, res: any) => {
+  const token = req.query.token as string;
+  if (!token) return res.status(400).send("Error: Missing token query parameter");
+
+  const backendUrl = req.protocol + '://' + req.get('host');
+
+  const script = `
+const { exec } = require('child_process');
+
+const token = "${token}";
+const backendUrl = "${backendUrl}";
+
+console.log(\`[DEBUG] Agent initialized. Using token: "\${token}"\`);
+console.log(\`[DEBUG] Target backend: \${backendUrl}\`);
+
+async function sendLog(jobId, logLine) {
+  try {
+    await fetch(\`\${backendUrl}/api/agents/logs\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, jobId, logLine })
+    });
+  } catch (err) {
+    console.error("Failed to send log:", err.message);
+  }
+}
+
+async function executeJob(job) {
+  console.log("Received job:", job.id);
+  const repo = job.repository;
+  const cloneCmd = \`git clone \${repo} repo_\${job.id} && cd repo_\${job.id} && npm install && npm run build\`;
+  
+  await sendLog(job.id, "Starting job. Cloning repository...");
+  
+  exec(cloneCmd, async (error, stdout, stderr) => {
+    let status = "Success";
+    if (error) {
+      console.error(\`exec error: \${error}\`);
+      await sendLog(job.id, \`Error: \${error.message}\`);
+      status = "Failed";
+    }
+    if (stdout) await sendLog(job.id, stdout);
+    if (stderr) await sendLog(job.id, stderr);
+    
+    await sendLog(job.id, \`Job finished with status: \${status}\`);
+    
+    // Report completion
+    await fetch(\`\${backendUrl}/api/agents/complete\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, jobId: job.id, status })
+    });
+  });
+}
+
+async function poll() {
+  try {
+    const res = await fetch(\`\${backendUrl}/api/agents/poll\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+    });
+    
+    if (res.ok) {
+      const data = await res.json();
+      if (data.job) {
+        await executeJob(data.job);
+      }
+    } else {
+      const errText = await res.text();
+      console.error(\`Poll failed: \${res.status} - \${errText}\`);
+    }
+  } catch (error) {
+    console.error("Network error during polling:", error.message);
+  }
+  
+  setTimeout(poll, 5000);
+}
+
+// Start polling
+poll();
+`;
+
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(script);
+});
 
 export default router;

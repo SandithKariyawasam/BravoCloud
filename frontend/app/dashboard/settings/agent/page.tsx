@@ -283,15 +283,15 @@ export default function AgentSettingsPage() {
                   <div className="bg-black border border-[#27272a] rounded-lg p-4 relative group">
                     <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-all">
                       {newAgentOS === 'Windows' 
-                        ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install.ps1" -OutFile "install.ps1"; .\\install.ps1 --token ${generatedToken}`
-                        : `curl -sSL ${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install-agent.sh | bash -s -- --token ${generatedToken}`
+                        ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/agents/install.ps1?token=${generatedToken}" -OutFile "install.ps1"; .\\install.ps1`
+                        : `curl -sSL "${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/agents/install-agent.sh?token=${generatedToken}" | bash`
                       }
                     </pre>
                     <button 
                       onClick={() => copyToClipboard(
                         newAgentOS === 'Windows'
-                          ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install.ps1" -OutFile "install.ps1"; .\\install.ps1 --token ${generatedToken}`
-                          : `curl -sSL ${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install-agent.sh | bash -s -- --token ${generatedToken}`
+                          ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/agents/install.ps1?token=${generatedToken}" -OutFile "install.ps1"; .\\install.ps1`
+                          : `curl -sSL "${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/agents/install-agent.sh?token=${generatedToken}" | bash`
                       )}
                       className="absolute top-2 right-2 p-1.5 bg-[#27272a] rounded text-[#a1a1aa] hover:text-white opacity-0 group-hover:opacity-100 transition-all"
                     >
