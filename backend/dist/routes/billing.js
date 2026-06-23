@@ -15,6 +15,7 @@ router.get('/', middleware_1.verifyToken, async (req, res) => {
         const userData = userDoc.data() || {};
         const billingAddress = userData.billingAddress || null;
         const taxId = userData.taxId || null;
+        const invoiceSettings = userData.invoiceSettings || null;
         // Fetch Payment Methods
         const cardsSnapshot = await firebase_1.db.collection('users').doc(userId).collection('payment_methods').get();
         const cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -35,6 +36,7 @@ router.get('/', middleware_1.verifyToken, async (req, res) => {
         res.json({
             billingAddress,
             taxId,
+            invoiceSettings,
             cards,
             invoices
         });
@@ -61,6 +63,21 @@ router.patch('/address', middleware_1.verifyToken, async (req, res) => {
     }
     catch (error) {
         console.error('Error updating billing info:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// PATCH /api/billing/invoice-settings
+router.patch('/invoice-settings', middleware_1.verifyToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { invoiceSettings } = req.body;
+        if (invoiceSettings !== undefined) {
+            await firebase_1.db.collection('users').doc(userId).update({ invoiceSettings });
+        }
+        res.json({ message: 'Invoice settings updated', invoiceSettings });
+    }
+    catch (error) {
+        console.error('Error updating invoice settings:', error);
         res.status(500).json({ error: error.message });
     }
 });

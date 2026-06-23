@@ -17,6 +17,7 @@ router.get('/', verifyToken, async (req: any, res: any) => {
     const userData = userDoc.data() || {};
     const billingAddress = userData.billingAddress || null;
     const taxId = userData.taxId || null;
+    const invoiceSettings = userData.invoiceSettings || null;
 
     // Fetch Payment Methods
     const cardsSnapshot = await db.collection('users').doc(userId).collection('payment_methods').get();
@@ -41,6 +42,7 @@ router.get('/', verifyToken, async (req: any, res: any) => {
     res.json({
       billingAddress,
       taxId,
+      invoiceSettings,
       cards,
       invoices
     });
@@ -67,6 +69,23 @@ router.patch('/address', verifyToken, async (req: any, res: any) => {
     res.json({ message: 'Billing info updated', updates });
   } catch (error: any) {
     console.error('Error updating billing info:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH /api/billing/invoice-settings
+router.patch('/invoice-settings', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { invoiceSettings } = req.body;
+    
+    if (invoiceSettings !== undefined) {
+      await db.collection('users').doc(userId).update({ invoiceSettings });
+    }
+    
+    res.json({ message: 'Invoice settings updated', invoiceSettings });
+  } catch (error: any) {
+    console.error('Error updating invoice settings:', error);
     res.status(500).json({ error: error.message });
   }
 });

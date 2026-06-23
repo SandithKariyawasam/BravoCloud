@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, CreditCard, Building2, Download, Plus, Zap, ShieldCheck, Clock, ArrowRight, X, Trash2, CheckCircle2 } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { Loader2, CreditCard, Building2, Plus, Zap, ShieldCheck, ArrowRight, X, Trash2 } from "lucide-react";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
 
@@ -147,122 +145,6 @@ export default function BillingSettingsPage() {
     }
   };
 
-  const handleDownloadInvoice = async (inv: any) => {
-    const doc = new jsPDF();
-    const formattedInvoiceNumber = inv.invoiceNumber.replace('INV-', 'B');
-    
-    // Header & Logo
-    try {
-      const response = await fetch('/BravoCloud-logo.png');
-      if (response.ok) {
-        const blob = await response.blob();
-        const base64data = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        doc.addImage(base64data, 'PNG', 14, 10, 15, 15);
-      } else {
-        doc.setFontSize(22);
-        doc.setTextColor(39, 39, 42);
-        doc.text("BravoCloud", 14, 22);
-      }
-    } catch (e) {
-      doc.setFontSize(22);
-      doc.setTextColor(39, 39, 42);
-      doc.text("BravoCloud", 14, 22);
-    }
-    
-    // Company Address
-    doc.setFontSize(10);
-    doc.setTextColor(113, 113, 122); // Zinc 500
-    doc.text("BravoScript Inc.", 14, 32);
-    doc.text("123 Tech Avenue, Suite 400", 14, 37);
-    doc.text("Wester Province, CA 94105", 14, 42);
-    doc.text("Colombo 11, Sri Lanka", 14, 47);
-
-    // Invoice Details
-    doc.setFontSize(10);
-    doc.setTextColor(39, 39, 42); // Zinc 800
-    doc.text("Invoice #: " + formattedInvoiceNumber, 120, 32);
-    doc.text("Date: " + new Date(inv.date).toLocaleDateString(), 120, 37);
-    doc.text("Status: " + inv.status, 120, 42);
-    
-    // Billing Period
-    const invDate = new Date(inv.date);
-    const firstDay = new Date(invDate.getFullYear(), invDate.getMonth(), 1);
-    const lastDay = new Date(invDate.getFullYear(), invDate.getMonth() + 1, 0);
-    doc.text(`Billing Period: ${firstDay.toLocaleDateString()} - ${lastDay.toLocaleDateString()}`, 120, 47);
-
-    // Bill To
-    doc.setFontSize(12);
-    doc.setTextColor(39, 39, 42);
-    doc.text("Bill To:", 14, 62);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(113, 113, 122);
-    
-    let yPos = 68;
-    if (user?.name) {
-      doc.text(user.name, 14, yPos);
-      yPos += 5;
-    }
-    
-    if (billingData?.billingAddress) {
-      const addr = billingData.billingAddress;
-      if (typeof addr === 'object') {
-        if (addr.line1) { doc.text(addr.line1, 14, yPos); yPos += 5; }
-        if (addr.line2) { doc.text(addr.line2, 14, yPos); yPos += 5; }
-        if (addr.city) { doc.text(`${addr.city}, ${addr.state} ${addr.postalCode}`, 14, yPos); yPos += 5; }
-        if (addr.country) { doc.text(addr.country, 14, yPos); yPos += 5; }
-      } else {
-        const lines = String(addr).split('\n');
-        lines.forEach(line => {
-          doc.text(line, 14, yPos);
-          yPos += 5;
-        });
-      }
-    } else {
-      doc.text("No billing address on file.", 14, yPos);
-    }
-
-    if (billingData?.taxId) {
-      yPos += 5;
-      doc.text(`Tax ID / VAT: ${billingData.taxId}`, 14, yPos);
-    }
-
-    // Table
-    const tableData = [
-      ["BravoCloud Serverless Hosting (Monthly)", "$0.00", `$${inv.amount.toFixed(2)}`]
-    ];
-
-    autoTable(doc, {
-      startY: yPos + 10,
-      head: [['Description', 'Unit Price', 'Amount']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [39, 39, 42], textColor: 255 },
-      styles: { fontSize: 10, cellPadding: 6 },
-    });
-
-    const finalY = (doc as any).lastAutoTable.finalY || yPos + 30;
-    
-    // Total
-    doc.setFontSize(12);
-    doc.setTextColor(39, 39, 42);
-    doc.text(`Total Due: $${inv.amount.toFixed(2)}`, 140, finalY + 10);
-    
-    // Services Link & Footer
-    doc.setFontSize(10);
-    doc.setTextColor(59, 130, 246); // Blue color for link
-    doc.textWithLink("Your services: bravocloud.tech/dashboard/services", 14, finalY + 20, { url: 'https://bravocloud.tech/dashboard/' });
-
-    doc.setTextColor(113, 113, 122);
-    doc.text("Thank you for using BravoCloud!", 14, finalY + 30);
-
-    doc.save(`${formattedInvoiceNumber}.pdf`);
-  };
-
   if (loading || !user || !billingData) {
     return (
       <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
@@ -386,62 +268,6 @@ export default function BillingSettingsPage() {
                   )}
                 </div>
               </section>
-
-              {/* Invoices */}
-              <section className="bg-[#09090b] border border-[#27272a] rounded-xl overflow-hidden shadow-lg">
-                <div className="p-6 border-b border-[#27272a]">
-                  <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-1">
-                    <Clock size={18} className="text-orange-400" /> Billing History
-                  </h3>
-                  <p className="text-[#a1a1aa] text-sm">
-                    View and download past invoices.
-                  </p>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-[#121214] border-b border-[#27272a] text-[#71717a]">
-                      <tr>
-                        <th className="px-6 py-3 font-medium">Date</th>
-                        <th className="px-6 py-3 font-medium">Invoice Number</th>
-                        <th className="px-6 py-3 font-medium">Amount</th>
-                        <th className="px-6 py-3 font-medium">Status</th>
-                        <th className="px-6 py-3 font-medium text-right">Invoice</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#27272a]">
-                      {invoices.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="px-6 py-8 text-center text-[#71717a]">No invoices found</td>
-                        </tr>
-                      ) : (
-                        invoices.map((inv: any) => (
-                          <tr key={inv.id} className="hover:bg-[#121214] transition-colors">
-                            <td className="px-6 py-4 text-[#e4e4e7]">{new Date(inv.date).toLocaleDateString()}</td>
-                            <td className="px-6 py-4 text-[#a1a1aa]">{inv.invoiceNumber}</td>
-                            <td className="px-6 py-4 text-white font-medium">${inv.amount.toFixed(2)}</td>
-                            <td className="px-6 py-4">
-                              <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${inv.status === 'Paid' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'}`}>
-                                {inv.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <button 
-                                onClick={() => handleDownloadInvoice(inv)}
-                                className="text-[#a1a1aa] hover:text-white transition-colors" 
-                                title="Download"
-                              >
-                                <Download size={16} className="inline" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-
             </div>
 
             <div className="space-y-6">
