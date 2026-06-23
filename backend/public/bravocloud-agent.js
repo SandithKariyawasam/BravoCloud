@@ -11,6 +11,9 @@ const token = process.argv[tokenIndex + 1].replace(/^["']|["']$/g, '').trim();
 
 const backendUrl = process.env.BRAVOCLOUD_BACKEND_URL || "https://bravo-cloud-ydew.vercel.app"; 
 
+console.log(`[DEBUG] Agent initialized. Using token: "${token}"`);
+console.log(`[DEBUG] Target backend: ${backendUrl}`);
+
 async function sendLog(jobId, logLine) {
   try {
     await fetch(`${backendUrl}/api/agents/logs`, {
