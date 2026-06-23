@@ -49,7 +49,16 @@ export default function AgentSettingsPage() {
       window.location.href = "/";
       return;
     }
+    
+    // Initial fetch
     fetchAgents(token);
+
+    // Poll every 5 seconds for status updates
+    const interval = setInterval(() => {
+      fetchAgents(token);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleGenerateToken = async (e: React.FormEvent) => {

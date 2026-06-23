@@ -75,8 +75,12 @@ async function poll() {
       if (data.job) {
         await executeJob(data.job);
       }
+    } else {
+      const errText = await res.text();
+      console.error(`Poll failed: ${res.status} - ${errText}`);
     }
   } catch (error) {
+    console.error("Network error during polling:", error.message);
   }
   
   setTimeout(poll, 5000);
