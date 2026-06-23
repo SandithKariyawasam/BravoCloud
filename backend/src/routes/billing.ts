@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../lib/firebase';
 import { verifyToken } from '../lib/middleware';
+import { generateMonthlyInvoices } from '../jobs/monthlyInvoices';
 
 const router = Router();
 
@@ -26,18 +27,6 @@ router.get('/', verifyToken, async (req: any, res: any) => {
     // Fetch Invoices
     const invoicesSnapshot = await db.collection('users').doc(userId).collection('invoices').orderBy('date', 'desc').get();
     const invoices = invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Seed dummy invoice if none exist
-    if (invoices.length === 0) {
-      const dummyInvoice = {
-        date: new Date().toISOString(),
-        amount: 0.00,
-        status: 'Paid',
-        invoiceNumber: `INV-${Date.now()}`
-      };
-      await db.collection('users').doc(userId).collection('invoices').add(dummyInvoice);
-      invoices.push({ id: 'dummy', ...dummyInvoice });
-    }
 
     res.json({
       billingAddress,
@@ -142,6 +131,18 @@ router.delete('/cards/:id', verifyToken, async (req: any, res: any) => {
     res.json({ message: 'Card deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting card:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/billing/admin/trigger-invoices
+// Manually triggers the monthly invoice generation for testing
+router.post('/admin/trigger-invoices', verifyToken, async (req: any, res: any) => {
+  try {
+    await generateMonthlyInvoices();
+    res.json({ message: 'Monthly invoices generated successfully.' });
+  } catch (error: any) {
+    console.error('Error triggering invoices:', error);
     res.status(500).json({ error: error.message });
   }
 });

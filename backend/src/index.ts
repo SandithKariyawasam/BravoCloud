@@ -14,6 +14,7 @@ import supportRoutes from './routes/support';
 import chatRoutes from './routes/chat';
 import billingRoutes from './routes/billing';
 import { db } from './lib/firebase';
+import { startMonthlyInvoiceCron } from './jobs/monthlyInvoices';
 import path from 'path';
 
 dotenv.config();
@@ -71,6 +72,7 @@ app.use((err: any, req: any, res: any, next: any) => {
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+    startMonthlyInvoiceCron();
   });
 }
 

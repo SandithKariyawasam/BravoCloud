@@ -18,6 +18,7 @@ const user_1 = __importDefault(require("./routes/user"));
 const support_1 = __importDefault(require("./routes/support"));
 const chat_1 = __importDefault(require("./routes/chat"));
 const billing_1 = __importDefault(require("./routes/billing"));
+const monthlyInvoices_1 = require("./jobs/monthlyInvoices");
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -63,6 +64,7 @@ app.use((err, req, res, next) => {
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`BravoCloud Backend running on http://localhost:${PORT}`);
+        (0, monthlyInvoices_1.startMonthlyInvoiceCron)();
     });
 }
 exports.default = app;

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const firebase_1 = require("../lib/firebase");
 const middleware_1 = require("../lib/middleware");
+const monthlyInvoices_1 = require("../jobs/monthlyInvoices");
 const router = (0, express_1.Router)();
 // GET /api/billing
 router.get('/', middleware_1.verifyToken, async (req, res) => {
@@ -22,17 +23,6 @@ router.get('/', middleware_1.verifyToken, async (req, res) => {
         // Fetch Invoices
         const invoicesSnapshot = await firebase_1.db.collection('users').doc(userId).collection('invoices').orderBy('date', 'desc').get();
         const invoices = invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        // Seed dummy invoice if none exist
-        if (invoices.length === 0) {
-            const dummyInvoice = {
-                date: new Date().toISOString(),
-                amount: 0.00,
-                status: 'Paid',
-                invoiceNumber: `INV-${Date.now()}`
-            };
-            await firebase_1.db.collection('users').doc(userId).collection('invoices').add(dummyInvoice);
-            invoices.push({ id: 'dummy', ...dummyInvoice });
-        }
         res.json({
             billingAddress,
             taxId,
@@ -128,6 +118,18 @@ router.delete('/cards/:id', middleware_1.verifyToken, async (req, res) => {
     }
     catch (error) {
         console.error('Error deleting card:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// POST /api/billing/admin/trigger-invoices
+// Manually triggers the monthly invoice generation for testing
+router.post('/admin/trigger-invoices', middleware_1.verifyToken, async (req, res) => {
+    try {
+        await (0, monthlyInvoices_1.generateMonthlyInvoices)();
+        res.json({ message: 'Monthly invoices generated successfully.' });
+    }
+    catch (error) {
+        console.error('Error triggering invoices:', error);
         res.status(500).json({ error: error.message });
     }
 });
