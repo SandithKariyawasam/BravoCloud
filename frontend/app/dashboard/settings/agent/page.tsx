@@ -273,10 +273,17 @@ export default function AgentSettingsPage() {
                   
                   <div className="bg-black border border-[#27272a] rounded-lg p-4 relative group">
                     <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-all">
-                      curl -sSL https://bravocloud.tech/install-agent.sh | bash -s -- --token {generatedToken}
+                      {newAgentOS === 'Windows' 
+                        ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install.ps1" -OutFile "install.ps1"; .\\install.ps1 --token ${generatedToken}`
+                        : `curl -sSL ${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install-agent.sh | bash -s -- --token ${generatedToken}`
+                      }
                     </pre>
                     <button 
-                      onClick={() => copyToClipboard(`curl -sSL https://bravocloud.tech/install-agent.sh | bash -s -- --token ${generatedToken}`)}
+                      onClick={() => copyToClipboard(
+                        newAgentOS === 'Windows'
+                          ? `Invoke-WebRequest -Uri "${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install.ps1" -OutFile "install.ps1"; .\\install.ps1 --token ${generatedToken}`
+                          : `curl -sSL ${process.env.NEXT_PUBLIC_API_URL || 'https://bravo-cloud-ydew.vercel.app'}/install-agent.sh | bash -s -- --token ${generatedToken}`
+                      )}
                       className="absolute top-2 right-2 p-1.5 bg-[#27272a] rounded text-[#a1a1aa] hover:text-white opacity-0 group-hover:opacity-100 transition-all"
                     >
                       {copied ? <CheckCircle2 size={14} className="text-emerald-400" /> : <Copy size={14} />}

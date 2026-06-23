@@ -34,6 +34,8 @@ app.set('trust proxy', 1);
 
 app.use(passport.initialize());
 
+app.use(express.static(path.join(__dirname, '../public')));
+
 app.use('/auth', authRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/projects', projectsRoutes);

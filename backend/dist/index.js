@@ -31,6 +31,7 @@ app.use((0, cors_1.default)({
 app.use(express_1.default.json());
 app.set('trust proxy', 1);
 app.use(passport_1.default.initialize());
+app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
 app.use('/auth', auth_1.default);
 app.use('/api/github', github_1.default);
 app.use('/api/projects', projects_1.default);
