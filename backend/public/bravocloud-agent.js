@@ -7,7 +7,7 @@ if (tokenIndex === -1 || !process.argv[tokenIndex + 1]) {
   console.error("Missing --token argument");
   process.exit(1);
 }
-const token = process.argv[tokenIndex + 1];
+const token = process.argv[tokenIndex + 1].replace(/^["']|["']$/g, '').trim();
 
 const backendUrl = process.env.BRAVOCLOUD_BACKEND_URL || "https://bravo-cloud-ydew.vercel.app"; 
 

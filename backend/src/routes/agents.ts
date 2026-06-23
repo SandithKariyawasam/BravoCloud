@@ -84,11 +84,14 @@ const findAgentByToken = async (token: string) => {
 // POST /api/agents/poll
 router.post('/poll', async (req: any, res: any) => {
   try {
-    const { token } = req.body;
+    const token = req.body.token?.trim();
     if (!token) return res.status(400).json({ error: 'Token is required' });
 
     const agentData = await findAgentByToken(token);
-    if (!agentData) return res.status(401).json({ error: 'Invalid token' });
+    if (!agentData) {
+      console.error(`Invalid token received: "${token}"`);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
     // Update agent status to online and lastSeen
     await db.collection('users').doc(agentData.userId).collection('agents').doc(agentData.agentId).update({
