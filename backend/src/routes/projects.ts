@@ -22,7 +22,8 @@ router.post('/', verifyToken, async (req: any, res: any) => {
       buildCommand,
       outputDirectory,
       installCommand,
-      envVars
+      envVars,
+      agentId
     } = req.body;
     const userId = req.user.id; // DB ID from session
 
@@ -76,6 +77,7 @@ router.post('/', verifyToken, async (req: any, res: any) => {
       envVars: envVars || null,
       subdomain,
       userId,
+      agentId: agentId || null,
       createdAt: new Date().toISOString()
     };
     await projectRef.set(projectData);
@@ -90,6 +92,22 @@ router.post('/', verifyToken, async (req: any, res: any) => {
       createdAt: new Date().toISOString()
     };
     await deploymentRef.set(deploymentData);
+
+    if (agentId) {
+      // Route deployment to self-hosted agent
+      const newJob = {
+        agentId,
+        repository: projectData.repoUrl,
+        deploymentId: deploymentRef.id,
+        projectId: projectRef.id,
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      };
+      await db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
+      
+      // We skip AWS provisioning completely for self-hosted agents
+      return res.status(201).json({ success: true, project: projectData, deployment: deploymentData });
+    }
 
     let ecrUri = '';
     try {

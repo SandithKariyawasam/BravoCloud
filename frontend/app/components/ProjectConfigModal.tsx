@@ -38,6 +38,11 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
   const [isDirBrowserOpen, setIsDirBrowserOpen] = useState(false);
   const [currentBrowsePath, setCurrentBrowsePath] = useState('./');
 
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [computeTarget, setComputeTarget] = useState<"managed" | "self-hosted">("managed");
+
   const getHeaders = () => ({
     "Authorization": `Bearer ${localStorage.getItem("bravocloud_token")}`
   });
@@ -60,6 +65,22 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
       .catch(err => console.error("Failed to load branches", err))
       .finally(() => setLoadingBranches(false));
   }, [repo.fullName]);
+
+  // Fetch agents
+  useEffect(() => {
+    fetch(`${apiUrl}/api/agents`, { headers: getHeaders() })
+      .then(res => res.json())
+      .then(data => {
+        if (data.agents) {
+          setAgents(data.agents);
+          if (data.agents.length > 0) {
+             setSelectedAgentId(data.agents[0].id);
+          }
+        }
+      })
+      .catch(err => console.error("Failed to fetch agents", err))
+      .finally(() => setLoadingAgents(false));
+  }, []);
 
   // Auto-detect framework
   useEffect(() => {
@@ -159,6 +180,10 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
         repoUrl: repo.htmlUrl || `https://github.com/${repo.fullName}`,
       };
 
+      if (computeTarget === "self-hosted" && selectedAgentId) {
+         payload.agentId = selectedAgentId;
+      }
+
       if (overrideBuildCmd && buildCommand.trim()) payload.buildCommand = buildCommand;
       if (overrideOutputDir && outputDirectory.trim()) payload.outputDirectory = outputDirectory;
       if (overrideInstallCmd && installCommand.trim()) payload.installCommand = installCommand;
@@ -192,7 +217,7 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
           deployLock.current = false;
         } else {
           // Full success
-          setSuccessMsg("Success! Project synced to GitHub & AWS deployment started.");
+          setSuccessMsg("Success! Project deployment started.");
           setDeploying(false);
           setTimeout(() => {
             onClose(); // Auto close after they read it
@@ -409,6 +434,112 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
               </div>
             </div>
           </div>
+
+          <div className="h-px bg-[#27272a]/50 w-full" />
+
+          {/* Compute Target Selection */}
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3">
+              <label className="text-xs font-medium text-[#a1a1aa] ml-1">Compute Target</label>
+              
+              <div className="flex flex-col gap-3">
+                {/* Managed Server Option */}
+                <label 
+                  className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                    computeTarget === 'managed' 
+                      ? 'bg-blue-500/10 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]' 
+                      : 'bg-black border-[#27272a] hover:border-[#3f3f46]'
+                  }`}
+                >
+                  <div className="mt-0.5 flex items-center justify-center">
+                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      computeTarget === 'managed' ? 'border-blue-400 bg-blue-500' : 'border-[#3f3f46] bg-transparent'
+                    }`}>
+                      {computeTarget === 'managed' && <div className="w-1.5 h-1.5 bg-black rounded-full" />}
+                    </div>
+                  </div>
+                  <input 
+                    type="radio" 
+                    name="computeTarget" 
+                    value="managed" 
+                    checked={computeTarget === 'managed'}
+                    onChange={() => setComputeTarget('managed')}
+                    className="hidden" 
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-semibold text-white">BravoCloud Managed Server</span>
+                    <span className="text-xs text-[#a1a1aa] mt-0.5">Deploy directly to BravoCloud infrastructure managed by BravoCloud.</span>
+                  </div>
+                </label>
+
+                {/* Self-Hosted Agent Option */}
+                <label 
+                  className={`flex flex-col gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                    computeTarget === 'self-hosted' 
+                      ? 'bg-purple-500/10 border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.1)]' 
+                      : 'bg-black border-[#27272a] hover:border-[#3f3f46]'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex items-center justify-center">
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                        computeTarget === 'self-hosted' ? 'border-purple-400 bg-purple-500' : 'border-[#3f3f46] bg-transparent'
+                      }`}>
+                        {computeTarget === 'self-hosted' && <div className="w-1.5 h-1.5 bg-black rounded-full" />}
+                      </div>
+                    </div>
+                    <input 
+                      type="radio" 
+                      name="computeTarget" 
+                      value="self-hosted" 
+                      checked={computeTarget === 'self-hosted'}
+                      onChange={() => setComputeTarget('self-hosted')}
+                      className="hidden" 
+                    />
+                    <div className="flex flex-col flex-1">
+                      <span className="text-sm font-semibold text-white flex items-center gap-2">
+                        Self-Hosted Agent
+                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] rounded uppercase font-bold tracking-wider">BYOC</span>
+                      </span>
+                      <span className="text-xs text-[#a1a1aa] mt-0.5">Route this deployment to your own hardware running the BravoCloud agent.</span>
+                    </div>
+                  </div>
+                  
+                  {computeTarget === 'self-hosted' && (
+                    <div className="ml-7 mt-2" onClick={(e) => e.stopPropagation()}>
+                      {loadingAgents ? (
+                         <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-2.5 text-sm text-[#71717a] font-mono flex items-center justify-between">
+                           <span>Loading agents...</span>
+                           <span className="w-4 h-4 border-2 border-[#27272a] border-t-[#a1a1aa] rounded-full animate-spin"></span>
+                         </div>
+                      ) : agents.length === 0 ? (
+                        <div className="bg-[#18181b] border border-[#27272a] rounded-lg p-3 text-sm text-[#a1a1aa]">
+                          No agents found. <a href="/dashboard/settings/agent" target="_blank" className="text-purple-400 hover:underline">Install one here</a>.
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <select
+                            value={selectedAgentId || ''}
+                            onChange={(e) => setSelectedAgentId(e.target.value)}
+                            className="w-full appearance-none bg-[#18181b] border border-[#27272a] rounded-lg p-2.5 pr-8 text-sm text-white focus:outline-none focus:border-purple-500/50 transition-colors cursor-pointer"
+                          >
+                            {agents.map(agent => (
+                              <option key={agent.id} value={agent.id}>
+                                {agent.name} ({agent.os}) - {agent.status}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#a1a1aa] pointer-events-none" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-px bg-[#27272a]/50 w-full" />
 
           {/* Collapsible Overrides */}
           <div className="flex flex-col gap-4">
