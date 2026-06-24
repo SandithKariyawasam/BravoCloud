@@ -428,6 +428,9 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
           projectId: projectData.id,
           deploymentId: deploymentRef.id,
           repository: projectData.repoUrl,
+          rootDir: projectData.rootDir,
+          installCommand: projectData.installCommand,
+          buildCommand: projectData.buildCommand,
           status: 'Pending',
           createdAt: new Date().toISOString()
         };
