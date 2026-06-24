@@ -392,7 +392,7 @@ async function executeJob(job) {
         tunnelOutput += output;
         console.log(\`[TUNNEL] \${output}\`);
         
-        const match = tunnelOutput.match(/your url is:\s*(https?:\/\/[^\s]+)/);
+        const match = tunnelOutput.match(/your url is:\\s*(https?:\\/\\/[^\\s]+)/);
         if (match && !urlReported) {
           urlReported = true;
           const publicUrl = match[1].trim();
