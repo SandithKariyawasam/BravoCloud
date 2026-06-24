@@ -362,6 +362,9 @@ async function executeJob(job) {
     const startApp = async () => {
       await sendLog(job.id, \`Starting application server on port 3000...\`);
       
+      // Force kill anything on port 3000 to prevent zombie processes and port collisions
+      await new Promise(resolve => exec('npx -y kill-port 3000', resolve));
+
       let appProcess;
       if (hasPackageJson) {
         const pkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'));
