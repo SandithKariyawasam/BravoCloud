@@ -320,9 +320,10 @@ async function executeJob(job) {
     }
   }
 
-  const cloneCmd = \`git clone \${repo} repo_\${job.id} && cd repo_\${job.id} && cd "\${rootDir}" && \${installCmd} && \${buildCmd}\`;
+  const repoDir = \`repo_\${job.id}\`;
+  const cloneCmd = \`git clone \${repo} \${repoDir}\`;
   
-  await sendLog(job.id, \`Starting job. Cloning repository and executing in \${rootDir}...\`);
+  await sendLog(job.id, \`Starting job. Cloning repository...\`);
   
   exec(cloneCmd, async (error, stdout, stderr) => {
     if (error) {
@@ -341,50 +342,101 @@ async function executeJob(job) {
     }
 
     if (stdout) await sendLog(job.id, stdout);
-    await sendLog(job.id, \`Build successful! Starting application server on port 3000...\`);
 
-    const appDir = \`repo_\${job.id}/\${rootDir}\`;
-    
-    const appProcess = spawn('npm', ['start'], { 
-      cwd: appDir, 
-      shell: true,
-      env: { ...process.env, PORT: '3000' }
-    });
+    const fs = require('fs');
+    const path = require('path');
+    const appDir = path.join(repoDir, rootDir);
 
-    appProcess.stdout.on('data', (data) => console.log(\`[APP] \${data}\`));
-    appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
+    if (!fs.existsSync(appDir)) {
+      await sendLog(job.id, \`Error: Root directory '\${rootDir}' not found\`);
+      await fetch(\`\${backendUrl}/api/agents/complete\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, jobId: job.id, status: "Failed" })
+      });
+      return;
+    }
 
-    await sendLog(job.id, "Exposing server to internet via localtunnel...");
-    const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', '3000'], { shell: true });
-    
-    runningServers[job.projectId] = { appProcess, tunnelProcess };
+    const hasPackageJson = fs.existsSync(path.join(appDir, 'package.json'));
 
-    let urlReported = false;
-    let tunnelOutput = "";
-
-    tunnelProcess.stdout.on('data', async (data) => {
-      const output = data.toString();
-      tunnelOutput += output;
-      console.log(\`[TUNNEL] \${output}\`);
+    const startApp = async () => {
+      await sendLog(job.id, \`Starting application server on port 3000...\`);
       
-      const match = tunnelOutput.match(/your url is:\s*(https?:\/\/[^\s]+)/);
-      if (match && !urlReported) {
-        urlReported = true;
-        const publicUrl = match[1].trim();
-        await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
-        await sendLog(job.id, \`Job finished with status: Success\`);
-        
-        await fetch(\`\${backendUrl}/api/agents/complete\`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl })
+      let appProcess;
+      if (hasPackageJson) {
+        appProcess = spawn('npm', ['start'], { 
+          cwd: appDir, 
+          shell: true,
+          env: { ...process.env, PORT: '3000' }
+        });
+      } else {
+        appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', '3000'], { 
+          cwd: appDir, 
+          shell: true 
         });
       }
-    });
 
-    tunnelProcess.stderr.on('data', (data) => {
-      console.error(\`[TUNNEL ERR] \${data}\`);
-    });
+      appProcess.stdout.on('data', (data) => console.log(\`[APP] \${data}\`));
+      appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
+
+      await sendLog(job.id, "Exposing server to internet via localtunnel...");
+      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', '3000'], { shell: true });
+      
+      runningServers[job.projectId] = { appProcess, tunnelProcess };
+
+      let urlReported = false;
+      let tunnelOutput = "";
+
+      tunnelProcess.stdout.on('data', async (data) => {
+        const output = data.toString();
+        tunnelOutput += output;
+        console.log(\`[TUNNEL] \${output}\`);
+        
+        const match = tunnelOutput.match(/your url is:\s*(https?:\/\/[^\s]+)/);
+        if (match && !urlReported) {
+          urlReported = true;
+          const publicUrl = match[1].trim();
+          await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
+          await sendLog(job.id, \`Job finished with status: Success\`);
+          
+          await fetch(\`\${backendUrl}/api/agents/complete\`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl })
+          });
+        }
+      });
+
+      tunnelProcess.stderr.on('data', (data) => {
+        console.error(\`[TUNNEL ERR] \${data}\`);
+      });
+    };
+
+    if (hasPackageJson) {
+      const buildCmdStr = \`cd "\${appDir}" && \${installCmd} && \${buildCmd}\`;
+      await sendLog(job.id, \`Found package.json. Running build commands...\`);
+      exec(buildCmdStr, async (err, bStdout, bStderr) => {
+        if (err) {
+          console.error(\`build error: \${err}\`);
+          await sendLog(job.id, \`Build Error: \${err.message}\`);
+          if (bStdout) await sendLog(job.id, bStdout);
+          if (bStderr) await sendLog(job.id, bStderr);
+          await sendLog(job.id, \`Job finished with status: Failed\`);
+          
+          await fetch(\`\${backendUrl}/api/agents/complete\`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, jobId: job.id, status: "Failed" })
+          });
+          return;
+        }
+        if (bStdout) await sendLog(job.id, bStdout);
+        await startApp();
+      });
+    } else {
+      await sendLog(job.id, "No package.json detected. Treating as a static site.");
+      await startApp();
+    }
   });
 }
 
