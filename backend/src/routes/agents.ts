@@ -359,11 +359,19 @@ async function executeJob(job) {
 
     const hasPackageJson = fs.existsSync(path.join(appDir, 'package.json'));
 
+    const getFreePort = () => new Promise((resolve) => {
+      const net = require('net');
+      const srv = net.createServer();
+      srv.listen(0, () => {
+        const port = srv.address().port;
+        srv.close(() => resolve(port));
+      });
+    });
+
     const startApp = async () => {
-      await sendLog(job.id, \`Starting application server on port 3000...\`);
-      
-      // Force kill anything on port 3000 to prevent zombie processes and port collisions
-      await new Promise(resolve => exec('npx -y kill-port 3000', resolve));
+      const port = await getFreePort();
+      const portStr = port.toString();
+      await sendLog(job.id, \`Starting application server on dynamically assigned port \${port}...\`);
 
       let appProcess;
       if (hasPackageJson) {
@@ -371,25 +379,25 @@ async function executeJob(job) {
         const scripts = pkg.scripts || {};
         
         if (scripts.start) {
-          appProcess = spawn('npm', ['start'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+          appProcess = spawn('npm', ['start'], { cwd: appDir, shell: true, env: { ...process.env, PORT: portStr } });
         } else if (fs.existsSync(path.join(appDir, 'dist'))) {
           await sendLog(job.id, "Detected 'dist' output. Serving statically.");
-          appProcess = spawn('npx', ['-y', 'serve', '-s', 'dist', '-l', '3000'], { cwd: appDir, shell: true });
+          appProcess = spawn('npx', ['-y', 'serve', '-s', 'dist', '-l', portStr], { cwd: appDir, shell: true });
         } else if (fs.existsSync(path.join(appDir, 'build'))) {
           await sendLog(job.id, "Detected 'build' output. Serving statically.");
-          appProcess = spawn('npx', ['-y', 'serve', '-s', 'build', '-l', '3000'], { cwd: appDir, shell: true });
+          appProcess = spawn('npx', ['-y', 'serve', '-s', 'build', '-l', portStr], { cwd: appDir, shell: true });
         } else if (scripts.preview) {
           await sendLog(job.id, "No start script found. Falling back to preview.");
-          appProcess = spawn('npm', ['run', 'preview', '--', '--port', '3000'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+          appProcess = spawn('npm', ['run', 'preview', '--', '--port', portStr], { cwd: appDir, shell: true, env: { ...process.env, PORT: portStr } });
         } else if (scripts.dev) {
           await sendLog(job.id, "No start script found. Falling back to dev server.");
-          appProcess = spawn('npm', ['run', 'dev', '--', '--port', '3000'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+          appProcess = spawn('npm', ['run', 'dev', '--', '--port', portStr], { cwd: appDir, shell: true, env: { ...process.env, PORT: portStr } });
         } else {
           await sendLog(job.id, "No scripts found. Serving root statically.");
-          appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', '3000'], { cwd: appDir, shell: true });
+          appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', portStr], { cwd: appDir, shell: true });
         }
       } else {
-        appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', '3000'], { 
+        appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', portStr], { 
           cwd: appDir, 
           shell: true 
         });
@@ -398,8 +406,8 @@ async function executeJob(job) {
       appProcess.stdout.on('data', (data) => console.log(\`[APP] \${data}\`));
       appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
 
-      await sendLog(job.id, "Exposing server to internet via localtunnel...");
-      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', '3000'], { shell: true });
+      await sendLog(job.id, \`Exposing server to internet via localtunnel on port \${port}...\`);
+      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr], { shell: true });
       
       runningServers[job.projectId] = { appProcess, tunnelProcess };
 
