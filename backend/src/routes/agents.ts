@@ -355,18 +355,22 @@ async function executeJob(job) {
     appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
 
     await sendLog(job.id, "Exposing server to internet via localtunnel...");
-    const tunnelProcess = spawn('npx', ['localtunnel', '--port', '3000'], { shell: true });
+    const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', '3000'], { shell: true });
     
     runningServers[job.projectId] = { appProcess, tunnelProcess };
 
     let urlReported = false;
+    let tunnelOutput = "";
 
     tunnelProcess.stdout.on('data', async (data) => {
       const output = data.toString();
+      tunnelOutput += output;
       console.log(\`[TUNNEL] \${output}\`);
-      if (output.includes('your url is:') && !urlReported) {
+      
+      const match = tunnelOutput.match(/your url is:\s*(https?:\/\/[^\s]+)/);
+      if (match && !urlReported) {
         urlReported = true;
-        const publicUrl = output.split('your url is:')[1].trim();
+        const publicUrl = match[1].trim();
         await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
         await sendLog(job.id, \`Job finished with status: Success\`);
         
