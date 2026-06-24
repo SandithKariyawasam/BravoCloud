@@ -11,6 +11,8 @@ interface Deployment {
   commitHash: string;
   createdAt: string;
   commitMessage?: string;
+  publicUrl?: string;
+  localUrl?: string;
 }
 
 interface Props {
