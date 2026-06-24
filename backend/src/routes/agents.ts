@@ -364,11 +364,27 @@ async function executeJob(job) {
       
       let appProcess;
       if (hasPackageJson) {
-        appProcess = spawn('npm', ['start'], { 
-          cwd: appDir, 
-          shell: true,
-          env: { ...process.env, PORT: '3000' }
-        });
+        const pkg = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'));
+        const scripts = pkg.scripts || {};
+        
+        if (scripts.start) {
+          appProcess = spawn('npm', ['start'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+        } else if (fs.existsSync(path.join(appDir, 'dist'))) {
+          await sendLog(job.id, "Detected 'dist' output. Serving statically.");
+          appProcess = spawn('npx', ['-y', 'serve', '-s', 'dist', '-l', '3000'], { cwd: appDir, shell: true });
+        } else if (fs.existsSync(path.join(appDir, 'build'))) {
+          await sendLog(job.id, "Detected 'build' output. Serving statically.");
+          appProcess = spawn('npx', ['-y', 'serve', '-s', 'build', '-l', '3000'], { cwd: appDir, shell: true });
+        } else if (scripts.preview) {
+          await sendLog(job.id, "No start script found. Falling back to preview.");
+          appProcess = spawn('npm', ['run', 'preview', '--', '--port', '3000'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+        } else if (scripts.dev) {
+          await sendLog(job.id, "No start script found. Falling back to dev server.");
+          appProcess = spawn('npm', ['run', 'dev', '--', '--port', '3000'], { cwd: appDir, shell: true, env: { ...process.env, PORT: '3000' } });
+        } else {
+          await sendLog(job.id, "No scripts found. Serving root statically.");
+          appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', '3000'], { cwd: appDir, shell: true });
+        }
       } else {
         appProcess = spawn('npx', ['-y', 'serve', '-s', '.', '-l', '3000'], { 
           cwd: appDir, 
