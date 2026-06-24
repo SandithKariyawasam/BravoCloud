@@ -162,6 +162,9 @@ router.post('/complete', async (req: any, res: any) => {
         if (publicUrl) {
           updateData.publicUrl = publicUrl;
         }
+        if (req.body.localUrl) {
+          updateData.localUrl = req.body.localUrl;
+        }
         await db.collection('deployments').doc(jobData.deploymentId).update(updateData);
       }
     }
@@ -425,11 +428,12 @@ async function executeJob(job) {
           const publicUrl = match[1].trim();
           await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
           await sendLog(job.id, \`Job finished with status: Success\`);
+          const localUrl = \`http://localhost:\${port}\`;
           
           await fetch(\`\${backendUrl}/api/agents/complete\`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl })
+            body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl, localUrl })
           });
         }
       });

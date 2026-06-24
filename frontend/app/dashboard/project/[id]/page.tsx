@@ -161,6 +161,7 @@ export default function ProjectDetails() {
   const isFailed = currentStatus === 'FAILED';
   const latestDeployment = deployments.length > 0 ? deployments[0] : null;
   const publicUrl = latestDeployment?.publicUrl || (project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null);
+  const localUrl = latestDeployment?.localUrl || null;
 
   return (
     <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
@@ -213,6 +214,12 @@ export default function ProjectDetails() {
                 {publicUrl && (
                   <a href={publicUrl} target="_blank" rel="noreferrer" className="text-[#a1a1aa] hover:text-white transition-colors flex items-center gap-1.5 text-sm group w-fit">
                     {publicUrl.replace('https://', '').replace('http://', '')}
+                    <svg className="w-3.5 h-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                  </a>
+                )}
+                {localUrl && (
+                  <a href={localUrl} target="_blank" rel="noreferrer" className="text-[#a1a1aa] hover:text-white transition-colors flex items-center gap-1.5 text-sm group w-fit">
+                    {localUrl.replace('http://', '')} <span className="px-1.5 py-0.5 rounded bg-[#27272a] text-[10px] font-bold text-white uppercase ml-1">Local</span>
                     <svg className="w-3.5 h-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                   </a>
                 )}
@@ -308,6 +315,15 @@ export default function ProjectDetails() {
                     </a>
                     <svg className="w-3.5 h-3.5 text-[#a1a1aa] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                   </div>
+                  {localUrl && (
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <a href={localUrl} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#a1a1aa]">
+                        {localUrl.replace('http://', '')}
+                      </a>
+                      <span className="px-1.5 py-0.5 rounded bg-[#27272a] text-[10px] font-bold text-white uppercase">Local</span>
+                      <svg className="w-3.5 h-3.5 text-[#a1a1aa] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                    </div>
+                  )}
                 </div>
 
                 {/* Status & Created */}

@@ -77,14 +77,32 @@ export default function DeploymentsList({ deployments, isGlobal = false }: Props
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
-                        <span className="font-mono text-[#a1a1aa] text-xs bg-[#27272a] px-2 py-0.5 rounded border border-[#3f3f46]">
-                          {dep.commitHash ? dep.commitHash.substring(0,7) : 'manual'}
-                        </span>
-                        <span className="text-[#e4e4e7] truncate max-w-[200px] inline-block align-middle">
-                          {dep.commitMessage || 'Deployment trigger'}
-                        </span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-[#71717a]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+                          <span className="font-mono text-[#a1a1aa] text-xs bg-[#27272a] px-2 py-0.5 rounded border border-[#3f3f46]">
+                            {dep.commitHash ? dep.commitHash.substring(0,7) : 'manual'}
+                          </span>
+                          <span className="text-[#e4e4e7] truncate max-w-[200px] inline-block align-middle">
+                            {dep.commitMessage || 'Deployment trigger'}
+                          </span>
+                        </div>
+                        {(dep.publicUrl || dep.localUrl) && (
+                          <div className="flex flex-col gap-1 mt-1 pl-6">
+                            {dep.publicUrl && (
+                              <a href={dep.publicUrl} target="_blank" rel="noreferrer" className="text-[11px] text-[#a1a1aa] hover:text-white flex items-center gap-1.5 w-fit transition-colors">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                {dep.publicUrl.replace('https://', '').replace('http://', '')}
+                              </a>
+                            )}
+                            {dep.localUrl && (
+                              <a href={dep.localUrl} target="_blank" rel="noreferrer" className="text-[11px] text-[#a1a1aa] hover:text-white flex items-center gap-1.5 w-fit transition-colors">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                {dep.localUrl.replace('http://', '')} <span className="px-1 py-0.5 rounded bg-[#27272a] text-[9px] font-bold text-white uppercase ml-0.5">Local</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-[#a1a1aa] whitespace-nowrap" suppressHydrationWarning>
