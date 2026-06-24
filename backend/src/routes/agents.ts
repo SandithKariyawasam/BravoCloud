@@ -141,7 +141,7 @@ router.post('/logs', async (req: any, res: any) => {
 // POST /api/agents/complete
 router.post('/complete', async (req: any, res: any) => {
   try {
-    const { token, jobId, status } = req.body;
+    const { token, jobId, status, publicUrl } = req.body;
     const agentData = await findAgentByToken(token);
     if (!agentData) return res.status(401).json({ error: 'Invalid token' });
 
@@ -156,9 +156,13 @@ router.post('/complete', async (req: any, res: any) => {
     if (jobDoc.exists) {
       const jobData = jobDoc.data();
       if (jobData?.deploymentId) {
-        await db.collection('deployments').doc(jobData.deploymentId).update({
+        const updateData: any = {
           status: status === 'Success' ? 'SUCCESS' : 'FAILED'
-        });
+        };
+        if (publicUrl) {
+          updateData.publicUrl = publicUrl;
+        }
+        await db.collection('deployments').doc(jobData.deploymentId).update(updateData);
       }
     }
 
@@ -275,10 +279,12 @@ router.get('/agent.js', (req: any, res: any) => {
   const backendUrl = req.protocol + '://' + req.get('host');
 
   const script = `
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 const token = "${token}";
 const backendUrl = "${backendUrl}";
+
+const runningServers = {};
 
 console.log(\`[DEBUG] Agent initialized. Using token: "\${token}"\`);
 console.log(\`[DEBUG] Target backend: \${backendUrl}\`);
@@ -302,27 +308,78 @@ async function executeJob(job) {
   const installCmd = job.installCommand || 'npm install';
   const buildCmd = job.buildCommand || 'npm run build';
   
+  if (runningServers[job.projectId]) {
+    await sendLog(job.id, "Stopping previous deployment server...");
+    try {
+      runningServers[job.projectId].appProcess.kill();
+      if (runningServers[job.projectId].tunnelProcess) {
+        runningServers[job.projectId].tunnelProcess.kill();
+      }
+    } catch (e) {
+      console.error("Failed to kill old process", e);
+    }
+  }
+
   const cloneCmd = \`git clone \${repo} repo_\${job.id} && cd repo_\${job.id} && cd "\${rootDir}" && \${installCmd} && \${buildCmd}\`;
   
   await sendLog(job.id, \`Starting job. Cloning repository and executing in \${rootDir}...\`);
   
   exec(cloneCmd, async (error, stdout, stderr) => {
-    let status = "Success";
     if (error) {
       console.error(\`exec error: \${error}\`);
       await sendLog(job.id, \`Error: \${error.message}\`);
-      status = "Failed";
+      if (stdout) await sendLog(job.id, stdout);
+      if (stderr) await sendLog(job.id, stderr);
+      await sendLog(job.id, \`Job finished with status: Failed\`);
+      
+      await fetch(\`\${backendUrl}/api/agents/complete\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, jobId: job.id, status: "Failed" })
+      });
+      return;
     }
+
     if (stdout) await sendLog(job.id, stdout);
-    if (stderr) await sendLog(job.id, stderr);
+    await sendLog(job.id, \`Build successful! Starting application server on port 3000...\`);
+
+    const appDir = \`repo_\${job.id}/\${rootDir}\`;
     
-    await sendLog(job.id, \`Job finished with status: \${status}\`);
+    const appProcess = spawn('npm', ['start'], { 
+      cwd: appDir, 
+      shell: true,
+      env: { ...process.env, PORT: '3000' }
+    });
+
+    appProcess.stdout.on('data', (data) => console.log(\`[APP] \${data}\`));
+    appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
+
+    await sendLog(job.id, "Exposing server to internet via localtunnel...");
+    const tunnelProcess = spawn('npx', ['localtunnel', '--port', '3000'], { shell: true });
     
-    // Report completion
-    await fetch(\`\${backendUrl}/api/agents/complete\`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, jobId: job.id, status })
+    runningServers[job.projectId] = { appProcess, tunnelProcess };
+
+    let urlReported = false;
+
+    tunnelProcess.stdout.on('data', async (data) => {
+      const output = data.toString();
+      console.log(\`[TUNNEL] \${output}\`);
+      if (output.includes('your url is:') && !urlReported) {
+        urlReported = true;
+        const publicUrl = output.split('your url is:')[1].trim();
+        await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
+        await sendLog(job.id, \`Job finished with status: Success\`);
+        
+        await fetch(\`\${backendUrl}/api/agents/complete\`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl })
+        });
+      }
+    });
+
+    tunnelProcess.stderr.on('data', (data) => {
+      console.error(\`[TUNNEL ERR] \${data}\`);
     });
   });
 }

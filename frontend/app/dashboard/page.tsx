@@ -228,6 +228,7 @@ export default function Dashboard() {
                       const isBuilding = status === 'QUEUED' || status === 'BUILDING';
                       const isSuccess = status === 'SUCCESS' || status === 'DEPLOYED';
                       const isFailed = status === 'FAILED';
+                      const publicUrl = latestDeployment?.publicUrl || (project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null);
 
                       return (
                         <div
@@ -238,9 +239,9 @@ export default function Dashboard() {
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
                               <div className="w-10 h-10 rounded-lg bg-transparent flex items-center justify-center flex-shrink-0 overflow-hidden relative">
-                                {project.subdomain && (
+                                {publicUrl && (
                                   <img
-                                    src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(project.subdomain.includes(':') || project.subdomain.match(/^\\d+\\.\\d+\\.\\d+\\.\\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`)}`}
+                                    src={`${process.env.NEXT_PUBLIC_API_URL}/api/projects/proxy-favicon?url=${encodeURIComponent(publicUrl)}`}
                                     className="w-full h-full object-cover z-10"
                                     onError={(e) => {
                                       e.currentTarget.style.display = 'none';

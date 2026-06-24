@@ -160,7 +160,7 @@ export default function ProjectDetails() {
   const isSuccess = currentStatus === 'SUCCESS' || currentStatus === 'DEPLOYED';
   const isFailed = currentStatus === 'FAILED';
   const latestDeployment = deployments.length > 0 ? deployments[0] : null;
-  const publicUrl = project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null;
+  const publicUrl = latestDeployment?.publicUrl || (project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : null);
 
   return (
     <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
