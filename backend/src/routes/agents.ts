@@ -137,12 +137,13 @@ router.post('/poll', async (req: any, res: any) => {
 // POST /api/agents/logs
 router.post('/logs', async (req: any, res: any) => {
   try {
-    const { token, jobId, log } = req.body;
+    const { token, jobId, log, logLine } = req.body;
+    const finalLog = log || logLine || "";
     const agentData = await findAgentByToken(token);
     if (!agentData) return res.status(401).json({ error: 'Invalid token' });
 
     await db.collection('users').doc(agentData.userId).collection('agent_jobs').doc(jobId).collection('logs').add({
-      log,
+      log: finalLog,
       timestamp: new Date().toISOString()
     });
 
@@ -311,7 +312,7 @@ async function sendLog(jobId, logLine) {
     await fetch(\`\${backendUrl}/api/agents/logs\`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, jobId, logLine })
+      body: JSON.stringify({ token, jobId, log: logLine })
     });
   } catch (err) {
     console.error("Failed to send log:", err.message);
