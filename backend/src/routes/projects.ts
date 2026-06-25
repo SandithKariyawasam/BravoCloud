@@ -273,7 +273,10 @@ router.get('/:id', verifyToken, async (req: any, res: any) => {
     }
 
     const { getEcsTaskPublicIp } = require('../lib/aws');
-    const taskIp = await getEcsTaskPublicIp(project.name);
+    let taskIp = null;
+    if (!project.agentId) {
+      taskIp = await getEcsTaskPublicIp(project.name);
+    }
 
     if (project.storage && project.storage.length > 0) {
       let updatedStorage = false;
