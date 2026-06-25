@@ -998,7 +998,7 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
           // Local -> AWS or Local A -> Local B: Send kill job to the previous agent
           const killJob = {
             agentId: projectData.agentId,
-            projectId: projectData.id,
+            projectId: projectId,
             action: 'KILL',
             status: 'Pending',
             createdAt: new Date().toISOString()
