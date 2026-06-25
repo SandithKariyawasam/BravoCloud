@@ -321,6 +321,40 @@ async function sendLog(jobId, logLine) {
 
 async function executeJob(job) {
   console.log("Received job:", job.id);
+  
+  if (job.action === 'KILL' || job.status === 'KILL') {
+    if (runningServers[job.projectId]) {
+      await sendLog(job.id, "Received KILL command. Stopping deployment server...");
+      try {
+        if (process.platform === 'win32') {
+          spawn('taskkill', ['/pid', runningServers[job.projectId].appProcess.pid, '/T', '/F']);
+          if (runningServers[job.projectId].tunnelProcess) {
+            spawn('taskkill', ['/pid', runningServers[job.projectId].tunnelProcess.pid, '/T', '/F']);
+          }
+        } else {
+          runningServers[job.projectId].appProcess.kill();
+          if (runningServers[job.projectId].tunnelProcess) {
+            runningServers[job.projectId].tunnelProcess.kill();
+          }
+        }
+        delete runningServers[job.projectId];
+        await sendLog(job.id, "Server successfully stopped.");
+      } catch (e) {
+        console.error("Failed to kill process", e);
+        await sendLog(job.id, \`Failed to kill process: \${e.message}\`);
+      }
+    } else {
+       await sendLog(job.id, "No server running for this project.");
+    }
+    
+    await fetch(\`\${backendUrl}/api/agents/complete\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, jobId: job.id, status: "Success" })
+    });
+    return;
+  }
+  
   const repo = job.repository;
   const rootDir = job.rootDir && job.rootDir !== './' ? job.rootDir : '.';
   const installCmd = job.installCommand || 'npm install';

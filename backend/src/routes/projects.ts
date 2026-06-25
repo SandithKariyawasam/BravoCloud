@@ -988,6 +988,25 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
     if (Object.keys(filteredUpdates).length > 0) {
       await projectRef.update(filteredUpdates);
       
+      // Handle Agent Transfer Teardown
+      if ('agentId' in filteredUpdates && filteredUpdates.agentId !== projectData.agentId) {
+        if (!projectData.agentId && filteredUpdates.agentId) {
+          // AWS -> Local: Tear down AWS compute infrastructure
+          const { deleteComputeInfrastructure } = require('../lib/aws');
+          deleteComputeInfrastructure(projectData.name).catch((e: any) => console.error("Compute teardown failed:", e));
+        } else if (projectData.agentId) {
+          // Local -> AWS or Local A -> Local B: Send kill job to the previous agent
+          const killJob = {
+            agentId: projectData.agentId,
+            projectId: projectData.id,
+            action: 'KILL',
+            status: 'Pending',
+            createdAt: new Date().toISOString()
+          };
+          db.collection('users').doc(userId).collection('agent_jobs').add(killJob).catch((e: any) => console.error("Kill job failed:", e));
+        }
+      }
+      
       // If WAF settings were updated, trigger the AWS WAF sync
       if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {
         const { updateProjectWAF } = require('../lib/aws');

@@ -1,16 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, Server, Plus, Terminal, Trash2, CheckCircle2, Copy, Cpu, ArrowRight } from "lucide-react";
+import { Loader2, Server, Plus, Terminal, Trash2, CheckCircle2, Copy } from "lucide-react";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
 
 export default function AgentSettingsPage() {
-  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modal State
@@ -38,12 +35,6 @@ export default function AgentSettingsPage() {
       if (agentsRes.ok) {
         const data = await agentsRes.json();
         setAgents(data.agents || []);
-      }
-
-      const projectsRes = await fetch(`${apiUrl}/api/projects`, { headers: { "Authorization": `Bearer ${token}` } });
-      if (projectsRes.ok) {
-        const data = await projectsRes.json();
-        setProjects(data.projects || []);
       }
     } catch (err) {
       console.error(err);
@@ -230,42 +221,7 @@ export default function AgentSettingsPage() {
               </div>
             </div>
 
-            {/* Project Routing Section */}
-            <div className="mt-8">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <Cpu className="text-emerald-500" size={20} />
-                Project Build Routing
-              </h2>
-              <p className="text-[#a1a1aa] text-sm mb-6">
-                Select a project below to configure whether it builds on BravoCloud infrastructure or your self-hosted agents.
-              </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {projects.length === 0 ? (
-                  <div className="col-span-full text-center p-8 border border-[#27272a] border-dashed rounded-xl text-[#71717a] text-sm">
-                    No projects found. Create a project first to configure routing.
-                  </div>
-                ) : (
-                  projects.map((proj: any) => (
-                    <div 
-                      key={proj.id}
-                      onClick={() => router.push(`/dashboard/project/${proj.id}/agent`)}
-                      className="bg-[#09090b] border border-[#27272a] hover:border-[#3f3f46] hover:bg-[#121214] rounded-xl p-5 cursor-pointer transition-all group flex flex-col justify-between h-full min-h-[120px]"
-                    >
-                      <div>
-                        <h3 className="text-white font-semibold mb-1 group-hover:text-emerald-400 transition-colors">{proj.name}</h3>
-                        <p className="text-xs text-[#71717a]">
-                          {proj.agentId ? "Routed to: Self-Hosted Agent" : "Routed to: AWS CodeBuild (Default)"}
-                        </p>
-                      </div>
-                      <div className="flex items-center text-xs font-medium text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity mt-4">
-                        Configure Routing <ArrowRight size={14} className="ml-1" />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
 
           </div>
         </div>

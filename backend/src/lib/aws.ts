@@ -722,21 +722,10 @@ export async function getRealAWSUsage(userId: string): Promise<any[]> {
   }
 }
 
-export async function deleteProjectInfrastructure(projectName: string, storageItems: any[]): Promise<void> {
+export async function deleteComputeInfrastructure(projectName: string): Promise<void> {
   const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  const repoName = `bravocloud-${sanitizedName}`;
   const clusterName = "bravocloud-cluster";
-
-  // 1. Delete ECR Repository
-  try {
-    const { DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
-    await ecrClient.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
-    console.log(`Deleted ECR repository: ${repoName}`);
-  } catch (e: any) {
-    if (e.name !== "RepositoryNotFoundException") {
-      console.warn(`Failed to delete ECR repository ${repoName}:`, e.message);
-    }
-  }
+  const region = process.env.AWS_REGION || "us-east-1";
 
   // 1.5 Delete CodeBuild Project
   try {
@@ -817,8 +806,6 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
         }
       }
     }
-
-
   } catch (e: any) {
     console.warn(`Failed to delete ALB Rules/Target Group for ${sanitizedName}:`, e.message);
   }
@@ -835,6 +822,27 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
       console.warn(`Failed to delete Log Group for ${sanitizedName}:`, e.message);
     }
   }
+}
+
+
+export async function deleteProjectInfrastructure(projectName: string, storageItems: any[]): Promise<void> {
+  const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const repoName = `bravocloud-${sanitizedName}`;
+  const clusterName = "bravocloud-cluster";
+
+  // 1. Delete ECR Repository
+  try {
+    const { DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
+    await ecrClient.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+    console.log(`Deleted ECR repository: ${repoName}`);
+  } catch (e: any) {
+    if (e.name !== "RepositoryNotFoundException") {
+      console.warn(`Failed to delete ECR repository ${repoName}:`, e.message);
+    }
+  }
+
+  // 1.5 Delete Compute Infrastructure
+  await deleteComputeInfrastructure(projectName);
 
   // 3. Iterate over storage resources
   for (const item of storageItems) {

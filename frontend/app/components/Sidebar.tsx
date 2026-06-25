@@ -264,7 +264,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
               if (projectId) {
                 router.push(`/dashboard/project/${projectId}/agent`);
               } else {
-                router.push('/dashboard/settings/agent');
+                router.push('/dashboard/agent');
               }
             }} q={q} category="Main" />
             <SidebarItem icon={<Network size={16} />} label="AI Gateway" hasArrow onClick={() => handleSelect("ai-gateway")} q={q} category="Main" />

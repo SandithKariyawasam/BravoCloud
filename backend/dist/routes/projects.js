@@ -14,7 +14,7 @@ const fetchApi = typeof node_fetch_1.default !== 'undefined' ? node_fetch_1.defa
 // Create a new project
 router.post('/', middleware_1.verifyToken, async (req, res) => {
     try {
-        const { name, repoUrl, framework, branch = "main", rootDir = "./", buildCommand, outputDirectory, installCommand, envVars } = req.body;
+        const { name, repoUrl, framework, branch = "main", rootDir = "./", buildCommand, outputDirectory, installCommand, envVars, agentId } = req.body;
         const userId = req.user.id; // DB ID from session
         if (!name || !repoUrl || !framework) {
             return res.status(400).json({ error: 'Missing required fields' });
@@ -61,6 +61,7 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
             envVars: envVars || null,
             subdomain,
             userId,
+            agentId: agentId || null,
             createdAt: new Date().toISOString()
         };
         await projectRef.set(projectData);
@@ -74,6 +75,24 @@ router.post('/', middleware_1.verifyToken, async (req, res) => {
             createdAt: new Date().toISOString()
         };
         await deploymentRef.set(deploymentData);
+        if (agentId) {
+            // Route deployment to self-hosted agent
+            const newJob = {
+                agentId,
+                repository: projectData.repoUrl,
+                deploymentId: deploymentRef.id,
+                projectId: projectRef.id,
+                projectName: projectData.name,
+                rootDir: projectData.rootDir,
+                installCommand: projectData.installCommand,
+                buildCommand: projectData.buildCommand,
+                status: 'Pending',
+                createdAt: new Date().toISOString()
+            };
+            await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
+            // We skip AWS provisioning completely for self-hosted agents
+            return res.status(201).json({ success: true, project: projectData, deployment: deploymentData });
+        }
         let ecrUri = '';
         try {
             ecrUri = await (0, aws_1.createEcrRepository)(projectData.name, userId);
@@ -203,7 +222,10 @@ router.get('/:id', middleware_1.verifyToken, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized' });
         }
         const { getEcsTaskPublicIp } = require('../lib/aws');
-        const taskIp = await getEcsTaskPublicIp(project.name);
+        let taskIp = null;
+        if (!project.agentId) {
+            taskIp = await getEcsTaskPublicIp(project.name);
+        }
         if (project.storage && project.storage.length > 0) {
             let updatedStorage = false;
             const { RDSClient, DescribeDBInstancesCommand } = require("@aws-sdk/client-rds");
@@ -345,6 +367,10 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
                     projectId: projectData.id,
                     deploymentId: deploymentRef.id,
                     repository: projectData.repoUrl,
+                    projectName: projectData.name,
+                    rootDir: projectData.rootDir,
+                    installCommand: projectData.installCommand,
+                    buildCommand: projectData.buildCommand,
                     status: 'Pending',
                     createdAt: new Date().toISOString()
                 };
@@ -479,6 +505,24 @@ router.get('/:id/logs/build', middleware_1.verifyToken, async (req, res) => {
         const deployments = deploymentsSnapshot.docs.map(doc => doc.data());
         deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         const latestDep = deployments[0];
+        if (projectData.agentId) {
+            // Local Agent Deploy
+            const agentJobsSnapshot = await firebase_1.db.collection('users').doc(userId).collection('agent_jobs')
+                .where('deploymentId', '==', latestDep.id).limit(1).get();
+            if (agentJobsSnapshot.empty) {
+                return res.json({ jobs: [], rawLog: 'No logs found for this agent deployment.' });
+            }
+            const jobId = agentJobsSnapshot.docs[0].id;
+            const logsSnapshot = await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').doc(jobId).collection('logs').orderBy('timestamp', 'asc').get();
+            const rawLog = logsSnapshot.docs.map(d => {
+                const l = d.data();
+                return `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.log}`;
+            }).join('\n');
+            return res.json({
+                jobs: [{ id: jobId, name: 'Local Agent Build Process', status: 'completed' }],
+                rawLog: rawLog || 'Agent is starting up or no logs emitted yet...'
+            });
+        }
         // We fetch all workflow runs for the repo
         const runsRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
             headers: {
@@ -545,6 +589,9 @@ router.get('/:id/logs/runtime', middleware_1.verifyToken, async (req, res) => {
         const projectData = projectDoc.data();
         if (projectData.userId !== userId)
             return res.status(403).json({ error: 'Unauthorized' });
+        if (projectData.agentId) {
+            return res.json({ logs: [{ timestamp: Date.now(), message: 'System Notice: Runtime logs for Self-Hosted Agents are securely streamed directly to your local machine\'s terminal, bypassing BravoCloud servers.' }] });
+        }
         const sanitizedName = projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
         const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
         const region = process.env.AWS_REGION || "us-east-1";
@@ -799,6 +846,58 @@ router.patch('/:id', middleware_1.verifyToken, async (req, res) => {
         }
         if (Object.keys(filteredUpdates).length > 0) {
             await projectRef.update(filteredUpdates);
+            // If Agent Routing was updated, handle the transfer
+            if (filteredUpdates.agentId !== undefined && filteredUpdates.agentId !== projectData.agentId) {
+                try {
+                    const userDoc = await firebase_1.db.collection('users').doc(userId).get();
+                    const user = userDoc.data();
+                    const deploymentRef = firebase_1.db.collection('deployments').doc();
+                    const deploymentData = {
+                        id: deploymentRef.id,
+                        projectId: projectData.id,
+                        status: 'QUEUED',
+                        commitHash: 'routing-transfer',
+                        createdAt: new Date().toISOString()
+                    };
+                    await deploymentRef.set(deploymentData);
+                    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+                    const host = req.headers.host;
+                    const dynamicBackendUrl = `${protocol}://${host}`;
+                    const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
+                    // Ensure ECR exists just in case (non-blocking)
+                    const { createEcrRepository } = require('../lib/aws');
+                    createEcrRepository(projectData.name, userId).catch(() => { });
+                    if (filteredUpdates.agentId) {
+                        // Transferring to Self-Hosted
+                        // Pause AWS compute to save resources instantly
+                        const { setProjectComputeState } = require('../lib/aws');
+                        setProjectComputeState(projectData.name, true).catch((e) => console.error("Compute pause failed:", e));
+                        const newJob = {
+                            agentId: filteredUpdates.agentId,
+                            projectId: projectData.id,
+                            deploymentId: deploymentRef.id,
+                            repository: projectData.repoUrl,
+                            projectName: projectData.name,
+                            rootDir: projectData.rootDir,
+                            installCommand: projectData.installCommand,
+                            buildCommand: projectData.buildCommand,
+                            status: 'Pending',
+                            createdAt: new Date().toISOString()
+                        };
+                        await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
+                        await deploymentRef.update({ status: 'BUILDING' });
+                    }
+                    else {
+                        // Transferring to AWS
+                        const { startCodeBuildJob } = require('../lib/aws');
+                        startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId).catch(() => { });
+                        await deploymentRef.update({ status: 'BUILDING' });
+                    }
+                }
+                catch (err) {
+                    console.error("Transfer trigger failed:", err);
+                }
+            }
             // If WAF settings were updated, trigger the AWS WAF sync
             if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {
                 const { updateProjectWAF } = require('../lib/aws');

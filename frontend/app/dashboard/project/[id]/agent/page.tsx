@@ -75,6 +75,14 @@ export default function ProjectAgentPage() {
   }, [projectId, router]);
 
   const handleSave = async () => {
+    if (project && project.agentId !== agentId && (project.agentId || agentId)) {
+      const isAwsToLocal = !project.agentId && agentId;
+      const confirmMsg = isAwsToLocal 
+        ? "WARNING: Transferring to a Local Agent will shut down the existing AWS compute infrastructure. Proceed?"
+        : "WARNING: Transferring away from this Local Agent will kill the running project process on that machine. Proceed?";
+      if (!window.confirm(confirmMsg)) return;
+    }
+
     setSaving(true);
     setSaveMessage("");
     const token = localStorage.getItem("bravocloud_token");
@@ -91,13 +99,21 @@ export default function ProjectAgentPage() {
       });
 
       if (res.ok) {
+        const isTransfer = project && project.agentId !== agentId;
+        
         if (project) {
           const updatedProject = { ...project, agentId };
           setProject(updatedProject);
           sessionStorage.setItem(`bravocloud_project_${projectId}`, JSON.stringify(updatedProject));
         }
-        setSaveMessage("Agent routing settings saved.");
-        setTimeout(() => setSaveMessage(""), 3000);
+        
+        if (isTransfer) {
+          setSaveMessage("Routing updated! Please trigger a Redeploy in the Deployments tab to apply this change.");
+          setTimeout(() => setSaveMessage(""), 8000);
+        } else {
+          setSaveMessage("Agent routing settings saved.");
+          setTimeout(() => setSaveMessage(""), 3000);
+        }
       } else {
         alert("Failed to save settings.");
       }
