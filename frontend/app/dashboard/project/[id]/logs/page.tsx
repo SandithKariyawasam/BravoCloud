@@ -15,6 +15,8 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
   
   const [runtimeLogs, setRuntimeLogs] = useState<any[]>([]);
+  const [buildLogs, setBuildLogs] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"runtime" | "build">("runtime");
   const [logsLoading, setLogsLoading] = useState(false);
   
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -24,10 +26,9 @@ export default function LogsPage() {
   // Auto-scroll to bottom of logs
   useEffect(() => {
     if (autoScroll && scrollContainerRef.current) {
-      // Use scrollTop instead of scrollIntoView to prevent yanking parent scroll containers
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
-  }, [runtimeLogs, autoScroll]);
+  }, [runtimeLogs, buildLogs, activeTab, autoScroll]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
@@ -108,15 +109,28 @@ export default function LogsPage() {
     // Polling logic for logs
     const fetchLogs = async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setRuntimeLogs(data.logs || []);
-          localStorage.setItem(`bravocloud_logs_cache_${projectId}_runtime`, JSON.stringify({
-            logs: data.logs || []
-          }));
+        // Fetch Runtime Logs
+        if (activeTab === "runtime") {
+          const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/runtime`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setRuntimeLogs(data.logs || []);
+            localStorage.setItem(`bravocloud_logs_cache_${projectId}_runtime`, JSON.stringify({
+              logs: data.logs || []
+            }));
+          }
+        } 
+        // Fetch Build Logs
+        else if (activeTab === "build") {
+          const res = await fetch(`${apiUrl}/api/projects/${projectId}/logs/build`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setBuildLogs(data.rawLog || "No build logs found.");
+          }
         }
       } catch (err) {
         console.error("Error fetching logs", err);
@@ -127,7 +141,7 @@ export default function LogsPage() {
     const interval = setInterval(fetchLogs, 3000); // Poll every 3 seconds
 
     return () => clearInterval(interval);
-  }, [projectId]);
+  }, [projectId, activeTab]);
 
   if (loading) {
     return (
@@ -175,11 +189,27 @@ export default function LogsPage() {
                   <h1 className="text-3xl font-bold tracking-tight">Logs</h1>
                 </div>
                 <p className="text-[#a1a1aa] max-w-2xl text-sm">
-                  View CloudWatch runtime logs for {project.name}.
+                  View build and runtime logs for {project.name}.
                 </p>
               </div>
             </div>
+            
+            <div className="flex bg-[#18181b] border border-[#27272a] rounded-lg p-1">
+              <button 
+                onClick={() => setActiveTab("build")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "build" ? "bg-[#27272a] text-white shadow" : "text-[#a1a1aa] hover:text-white hover:bg-[#27272a]/50"}`}
+              >
+                Build Logs
+              </button>
+              <button 
+                onClick={() => setActiveTab("runtime")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${activeTab === "runtime" ? "bg-[#27272a] text-white shadow" : "text-[#a1a1aa] hover:text-white hover:bg-[#27272a]/50"}`}
+              >
+                Runtime Logs
+              </button>
+            </div>
           </div>
+
 
           {/* Logs Terminal Window */}
           <div className="h-[calc(100vh-220px)] min-h-[400px] bg-[#09090b] border border-[#27272a] rounded-xl overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] flex flex-col relative before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/[0.02] before:to-transparent before:pointer-events-none">
@@ -190,7 +220,7 @@ export default function LogsPage() {
                   <svg className="w-4 h-4 text-[#71717a]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 9l3 3-3 3m5 0h3M4 17h16a2 2 0 002-2V9a2 2 0 00-2-2H4a2 2 0 00-2 2v6a2 2 0 002 2z"></path></svg>
                 </div>
                 <div className="text-xs font-mono text-[#a1a1aa] tracking-widest uppercase">
-                  CLOUDWATCH // RUNTIME_STREAM
+                  {activeTab === "runtime" ? "CLOUDWATCH // RUNTIME_STREAM" : "TERMINAL // BUILD_LOGS"}
                 </div>
               </div>
               
@@ -210,21 +240,29 @@ export default function LogsPage() {
             >
               
               <div className="flex flex-col">
-                {runtimeLogs.length === 0 ? (
-                  <div className="text-[#71717a] italic">Waiting for runtime logs...</div>
+                {activeTab === "build" ? (
+                  <div className="flex gap-4 px-2 py-0.5 rounded">
+                    <span className="flex-1 break-all">
+                      {buildLogs || <span className="text-[#71717a] italic">Waiting for build logs...</span>}
+                    </span>
+                  </div>
                 ) : (
-                  runtimeLogs.map((log: any, idx: number) => (
-                    <div key={idx} className="flex gap-4 hover:bg-[#27272a]/30 px-2 py-0.5 rounded">
-                      <span className="text-[#71717a] w-24 shrink-0" suppressHydrationWarning>
-                        {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
-                      </span>
-                      <span className="flex-1 break-all">
-                        {log.message.includes('Error') || log.message.includes('Exception') || log.message.includes('WARN') 
-                          ? <span className="text-[#ef4444]">{log.message}</span> 
-                          : log.message}
-                      </span>
-                    </div>
-                  ))
+                  runtimeLogs.length === 0 ? (
+                    <div className="text-[#71717a] italic">Waiting for runtime logs...</div>
+                  ) : (
+                    runtimeLogs.map((log: any, idx: number) => (
+                      <div key={idx} className="flex gap-4 hover:bg-[#27272a]/30 px-2 py-0.5 rounded">
+                        <span className="text-[#71717a] w-24 shrink-0" suppressHydrationWarning>
+                          {new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}
+                        </span>
+                        <span className="flex-1 break-all">
+                          {log.message.includes('Error') || log.message.includes('Exception') || log.message.includes('WARN') 
+                            ? <span className="text-[#ef4444]">{log.message}</span> 
+                            : log.message}
+                        </span>
+                      </div>
+                    ))
+                  )
                 )}
               </div>
               <div ref={logsEndRef} />
