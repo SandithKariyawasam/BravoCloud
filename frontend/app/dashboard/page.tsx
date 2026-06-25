@@ -305,7 +305,7 @@ export default function Dashboard() {
                                 )}
                               </button>
                               <a
-                                href={project.subdomain ? (project.subdomain.includes(':') || project.subdomain.match(/^\d+\.\d+\.\d+\.\d+/) ? `http://${project.subdomain}` : `https://${project.subdomain}`) : '#'}
+                                href={publicUrl || '#'}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}

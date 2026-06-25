@@ -43,7 +43,7 @@ export default function ProjectAgentPage() {
 
     const fetchData = async () => {
       try {
-        const userRes = await fetch(`${apiUrl}/api/auth/me`, { headers: { "Authorization": `Bearer ${token}` } });
+        const userRes = await fetch(`${apiUrl}/auth/me`, { headers: { "Authorization": `Bearer ${token}` } });
         if (userRes.ok) {
           const userData = await userRes.json();
           setUser(userData);

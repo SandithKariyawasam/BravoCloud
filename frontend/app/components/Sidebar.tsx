@@ -81,6 +81,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
   const isDomainsPage = pathname?.endsWith('/domains');
   const isStoragePage = pathname?.endsWith('/storage');
   const isWorkflowsPage = pathname?.endsWith('/workflows');
+  const isAgentPage = pathname?.endsWith('/agent');
   const isUsagePage = pathname?.endsWith('/usage');
   const isSupportPage = pathname?.endsWith('/support');
   const isSettingsPage = pathname?.includes('/settings');
@@ -96,10 +97,11 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
     if (isDomainsPage) return "Domains";
     if (isStoragePage) return "Storage";
     if (isWorkflowsPage) return "Workflows";
+    if (isAgentPage && !isSettingsPage) return "Agent";
     if (isUsagePage) return "Usage";
     if (isSupportPage) return "Support";
     if (isSettingsPage) return "Settings";
-    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isUsagePage && !isSupportPage && !isSettingsPage)) {
+    if (pathname === '/dashboard' || (isProjectView && !isDeploymentsPage && !isLogsPage && !isAnalyticsPage && !isSpeedInsightsPage && !isEnvPage && !isDomainsPage && !isStoragePage && !isWorkflowsPage && !isAgentPage && !isUsagePage && !isSupportPage && !isSettingsPage)) {
       return isProjectView ? "Overview" : "Projects";
     }
     return "Projects";
@@ -124,6 +126,8 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
       setActiveItem("Storage");
     } else if (isWorkflowsPage) {
       setActiveItem("Workflows");
+    } else if (isAgentPage && !isSettingsPage) {
+      setActiveItem("Agent");
     } else if (isUsagePage) {
       setActiveItem("Usage");
     } else if (isSupportPage) {
