@@ -209,6 +209,18 @@ export default function AgentSettingsPage() {
               </div>
             </section>
 
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+              <div className="mt-0.5 text-blue-400">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-blue-400">Disconnected Server?</h4>
+                <p className="text-xs text-[#a1a1aa] mt-1 leading-relaxed">
+                  If your server accidentally disconnects (e.g. your computer restarts or you close the terminal), simply re-run the same installation script you used to register it. If you lost your original installation command, delete the disconnected agent from the list above and click <strong className="text-[#e4e4e7]">Add Agent</strong> to register a new one.
+                </p>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

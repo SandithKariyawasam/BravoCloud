@@ -296,9 +296,25 @@ export default function ProjectDetails() {
                 {/* Deployment */}
                 <div className="flex flex-col gap-2">
                   <h4 className="text-[14px] text-[#a1a1aa]">Deployment</h4>
-                  <a href={project.taskIp ? `http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}` : (publicUrl || '#')} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
-                    {project.taskIp ? `http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}` : (publicUrl ? publicUrl.replace('https://', '').replace('http://', '') : (isFailed ? 'Failed' : 'Deploying...'))}
-                  </a>
+                  {project.taskIp ? (
+                    <a href={`http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
+                      {`http://${project.taskIp}${project.port === 80 ? '' : `:${project.port || 3000}`}`}
+                    </a>
+                  ) : localUrl ? (
+                    <div className="flex items-center gap-1.5">
+                      <a href={localUrl} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#e4e4e7]">
+                        {localUrl.replace('http://', '')}
+                      </a>
+                      <span className="px-1.5 py-0.5 rounded bg-[#27272a] text-[10px] font-bold text-white uppercase">Local</span>
+                      <a href={localUrl} target="_blank" rel="noreferrer" className="text-[#a1a1aa] hover:text-white transition-colors">
+                        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                      </a>
+                    </div>
+                  ) : (
+                    <span className="text-[14px] font-semibold truncate text-[#e4e4e7]">
+                      {isFailed ? 'Failed' : 'Deploying...'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Domains */}
@@ -315,15 +331,6 @@ export default function ProjectDetails() {
                     </a>
                     <svg className="w-3.5 h-3.5 text-[#a1a1aa] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                   </div>
-                  {localUrl && (
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <a href={localUrl} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline truncate text-[#a1a1aa]">
-                        {localUrl.replace('http://', '')}
-                      </a>
-                      <span className="px-1.5 py-0.5 rounded bg-[#27272a] text-[10px] font-bold text-white uppercase">Local</span>
-                      <svg className="w-3.5 h-3.5 text-[#a1a1aa] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                    </div>
-                  )}
                 </div>
 
                 {/* Status & Created */}

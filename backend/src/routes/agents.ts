@@ -11,7 +11,21 @@ router.get('/', verifyToken, async (req: any, res: any) => {
   try {
     const userId = req.user.id;
     const agentsSnapshot = await db.collection('users').doc(userId).collection('agents').orderBy('createdAt', 'desc').get();
-    const agents = agentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const agents = agentsSnapshot.docs.map(doc => {
+      const data = doc.data();
+      let status = data.status || 'Offline';
+      
+      // If the agent hasn't polled in the last 30 seconds, consider it disconnected
+      if (data.lastSeen) {
+        const lastSeenMs = new Date(data.lastSeen).getTime();
+        const nowMs = new Date().getTime();
+        if (nowMs - lastSeenMs > 30000) {
+          status = 'Offline';
+        }
+      }
+      
+      return { id: doc.id, ...data, status };
+    });
     res.json({ agents });
   } catch (error: any) {
     console.error('Error fetching agents:', error);
@@ -409,8 +423,10 @@ async function executeJob(job) {
       appProcess.stdout.on('data', (data) => console.log(\`[APP] \${data}\`));
       appProcess.stderr.on('data', (data) => console.error(\`[APP ERR] \${data}\`));
 
-      await sendLog(job.id, \`Exposing server to internet via localtunnel on port \${port}...\`);
-      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr], { shell: true });
+      const subdomainSlug = (job.projectName || job.projectId).toLowerCase().replace(/[^a-z0-9]/g, '');
+      const customSubdomain = \`bravocloud-\${subdomainSlug}\`;
+      await sendLog(job.id, \`Exposing server to internet via localtunnel on port \${port} with subdomain \${customSubdomain}...\`);
+      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr, '--subdomain', customSubdomain], { shell: true });
       
       runningServers[job.projectId] = { appProcess, tunnelProcess };
 
