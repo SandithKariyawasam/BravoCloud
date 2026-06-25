@@ -259,7 +259,14 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                 router.push('/dashboard/storage');
               }
             }} q={q} category="Main" />
-            <SidebarItem icon={<Cpu size={16} />} label="Agent" badge="Soon" q={q} category="Main" />
+            <SidebarItem icon={<Cpu size={16} />} label="Agent" active={!q && view === "main" && activeItem === "Agent"} onClick={() => {
+              handleSelect("main", setActiveItem, "Agent");
+              if (projectId) {
+                router.push(`/dashboard/project/${projectId}/agent`);
+              } else {
+                router.push('/dashboard/settings/agent');
+              }
+            }} q={q} category="Main" />
             <SidebarItem icon={<Network size={16} />} label="AI Gateway" hasArrow onClick={() => handleSelect("ai-gateway")} q={q} category="Main" />
             <SidebarItem icon={<GitMerge size={16} />} label="Workflows" active={!q && view === "main" && activeItem === "Workflows"} onClick={() => {
               handleSelect("main", setActiveItem, "Workflows");

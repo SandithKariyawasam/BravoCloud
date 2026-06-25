@@ -282,22 +282,6 @@ export default function ProjectSettingsPage({ params }: { params: Promise<{ id: 
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-[#e4e4e7] mb-2">Build Environment</label>
-                  <select
-                    value={agentId}
-                    onChange={(e) => setAgentId(e.target.value)}
-                    className="w-full bg-[#18181b] border border-[#3f3f46] text-white px-4 py-2 rounded-lg focus:outline-none focus:border-blue-500 transition-colors appearance-none"
-                  >
-                    <option value="">BravoCloud Managed Infrastructure (Default)</option>
-                    {agents.map((agent: any) => (
-                      <option key={agent.id} value={agent.id}>
-                        Self-Hosted: {agent.name} ({agent.status})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-[#71717a] mt-2">Route intensive build jobs directly to your private self-hosted agents.</p>
-                </div>
 
                 <div className="relative">
                   <label className="block text-sm font-medium text-[#e4e4e7] mb-2">Root Directory</label>

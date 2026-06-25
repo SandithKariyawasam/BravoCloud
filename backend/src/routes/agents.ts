@@ -329,9 +329,16 @@ async function executeJob(job) {
   if (runningServers[job.projectId]) {
     await sendLog(job.id, "Stopping previous deployment server...");
     try {
-      runningServers[job.projectId].appProcess.kill();
-      if (runningServers[job.projectId].tunnelProcess) {
-        runningServers[job.projectId].tunnelProcess.kill();
+      if (process.platform === 'win32') {
+        spawn('taskkill', ['/pid', runningServers[job.projectId].appProcess.pid, '/T', '/F']);
+        if (runningServers[job.projectId].tunnelProcess) {
+          spawn('taskkill', ['/pid', runningServers[job.projectId].tunnelProcess.pid, '/T', '/F']);
+        }
+      } else {
+        runningServers[job.projectId].appProcess.kill();
+        if (runningServers[job.projectId].tunnelProcess) {
+          runningServers[job.projectId].tunnelProcess.kill();
+        }
       }
     } catch (e) {
       console.error("Failed to kill old process", e);
