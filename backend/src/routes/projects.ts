@@ -604,6 +604,30 @@ router.get('/:id/logs/build', verifyToken, async (req: any, res: any) => {
     deployments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const latestDep = deployments[0];
     
+    if (projectData.agentId) {
+      // Local Agent Deploy
+      const agentJobsSnapshot = await db.collection('users').doc(userId).collection('agent_jobs')
+        .where('deploymentId', '==', latestDep.id).limit(1).get();
+        
+      if (agentJobsSnapshot.empty) {
+        return res.json({ jobs: [], rawLog: 'No logs found for this agent deployment.' });
+      }
+      
+      const jobId = agentJobsSnapshot.docs[0].id;
+      const logsSnapshot = await db.collection('users').doc(userId).collection('agent_jobs').doc(jobId).collection('logs').orderBy('timestamp', 'asc').get();
+      
+      const rawLog = logsSnapshot.docs.map(d => {
+        const l = d.data();
+        return `[${new Date(l.timestamp).toLocaleTimeString()}] ${l.log}`;
+      }).join('\n');
+      
+      return res.json({ 
+        jobs: [{ id: jobId, name: 'Local Agent Build Process', status: 'completed' }], 
+        rawLog: rawLog || 'Agent is starting up or no logs emitted yet...' 
+      });
+    }
+
+    
     // We fetch all workflow runs for the repo
     const runsRes = await fetchApi(`https://api.github.com/repos/${repoOwner}/${repoName}/actions/runs?per_page=10`, {
       headers: {
@@ -676,6 +700,10 @@ router.get('/:id/logs/runtime', verifyToken, async (req: any, res: any) => {
     
     const projectData = projectDoc.data() as any;
     if (projectData.userId !== userId) return res.status(403).json({ error: 'Unauthorized' });
+
+    if (projectData.agentId) {
+      return res.json({ logs: [{ timestamp: Date.now(), message: 'System Notice: Runtime logs for Self-Hosted Agents are securely streamed directly to your local machine\'s terminal, bypassing BravoCloud servers.' }] });
+    }
 
     const sanitizedName = projectData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-');
     const logGroupName = `/ecs/bravocloud/${sanitizedName}`;
