@@ -182,6 +182,38 @@ router.post('/complete', async (req: any, res: any) => {
         }
         await db.collection('deployments').doc(jobData.deploymentId).update(updateData);
       }
+      
+      // Execute deferred Agent Transfer teardown if successful
+      if (status === 'Success' && jobData?.projectId) {
+        const projectRef = db.collection('projects').doc(jobData.projectId);
+        const projectDoc = await projectRef.get();
+        if (projectDoc.exists) {
+          const project = projectDoc.data();
+          if (project?.pendingTransferFrom) {
+            if (project.pendingTransferFrom === 'aws') {
+              // AWS -> Local: Tear down AWS compute infrastructure
+              const { deleteComputeInfrastructure } = require('../lib/aws');
+              deleteComputeInfrastructure(project.name).catch((e: any) => console.error("Compute teardown failed:", e));
+              console.log(`[Local Agent] Deferred teardown of AWS compute for ${project.name}`);
+            } else if (project.pendingTransferFrom !== agentData.agentId) {
+              // Local -> Local: Send KILL job to previous agent
+              const killJob = {
+                agentId: project.pendingTransferFrom,
+                projectId: jobData.projectId,
+                action: 'KILL',
+                status: 'Pending',
+                createdAt: new Date().toISOString()
+              };
+              await db.collection('users').doc(agentData.userId).collection('agent_jobs').add(killJob);
+              console.log(`[Local Agent] Deferred KILL job sent to local agent ${project.pendingTransferFrom}`);
+            }
+            const admin = require('firebase-admin');
+            await projectRef.update({
+               pendingTransferFrom: admin.firestore.FieldValue.delete()
+            });
+          }
+        }
+      }
     }
 
     // Set agent back to Online (idle) instead of InProgress
@@ -467,38 +499,50 @@ async function executeJob(job) {
 
       const subdomainSlug = (job.projectName || job.projectId).toLowerCase().replace(/[^a-z0-9]/g, '');
       const customSubdomain = \`bravocloud-\${subdomainSlug}\`;
-      await sendLog(job.id, \`Exposing server to internet via localtunnel on port \${port} with subdomain \${customSubdomain}...\`);
-      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr, '--subdomain', customSubdomain], { shell: true });
-      
-      runningServers[job.projectId] = { appProcess, tunnelProcess };
 
-      let urlReported = false;
-      let tunnelOutput = "";
-
-      tunnelProcess.stdout.on('data', async (data) => {
-        const output = data.toString();
-        tunnelOutput += output;
-        console.log(\`[TUNNEL] \${output}\`);
+      const startTunnel = async (attempt = 1) => {
+        await sendLog(job.id, \`Exposing server to internet via localtunnel (Attempt \${attempt}) on port \${port} with subdomain \${customSubdomain}...\`);
+        const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr, '--subdomain', customSubdomain], { shell: true });
         
-        const match = tunnelOutput.match(/your url is:\\s*(https?:\\/\\/[^\\s]+)/);
-        if (match && !urlReported) {
-          urlReported = true;
-          const publicUrl = match[1].trim();
-          await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
-          await sendLog(job.id, \`Job finished with status: Success\`);
-          const localUrl = \`http://localhost:\${port}\`;
-          
-          await fetch(\`\${backendUrl}/api/agents/complete\`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl, localUrl })
-          });
-        }
-      });
+        runningServers[job.projectId] = { appProcess, tunnelProcess };
 
-      tunnelProcess.stderr.on('data', (data) => {
-        console.error(\`[TUNNEL ERR] \${data}\`);
-      });
+        let urlReported = false;
+        let tunnelOutput = "";
+
+        tunnelProcess.stdout.on('data', async (data) => {
+          const output = data.toString();
+          tunnelOutput += output;
+          console.log(\`[TUNNEL] \${output}\`);
+          
+          const match = tunnelOutput.match(/your url is:\\s*(https?:\\/\\/[^\\s]+)/);
+          if (match && !urlReported) {
+            urlReported = true;
+            const publicUrl = match[1].trim();
+            
+            if (publicUrl.includes(customSubdomain) || attempt >= 10) {
+              await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
+              await sendLog(job.id, \`Job finished with status: Success\`);
+              const localUrl = \`http://localhost:\${port}\`;
+              
+              await fetch(\`\${backendUrl}/api/agents/complete\`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl, localUrl })
+              });
+            } else {
+              await sendLog(job.id, \`Warning: loca.lt returned a random URL. The requested subdomain is likely in TIME_WAIT. Retrying in 5 seconds...\`);
+              tunnelProcess.kill();
+              setTimeout(() => startTunnel(attempt + 1), 5000);
+            }
+          }
+        });
+
+        tunnelProcess.stderr.on('data', (data) => {
+          console.error(\`[TUNNEL ERR] \${data}\`);
+        });
+      };
+
+      await startTunnel();
     };
 
     if (hasPackageJson) {

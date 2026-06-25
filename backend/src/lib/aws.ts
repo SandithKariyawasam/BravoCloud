@@ -727,6 +727,19 @@ export async function deleteComputeInfrastructure(projectName: string): Promise<
   const clusterName = "bravocloud-cluster";
   const region = process.env.AWS_REGION || "us-east-1";
 
+  // 1. Delete ECR Repository
+  try {
+    const { ECRClient, DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
+    const ecrClientLocal = new ECRClient({ region });
+    const repoName = `bravocloud-${sanitizedName}`;
+    await ecrClientLocal.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+    console.log(`Deleted ECR repository: ${repoName}`);
+  } catch (e: any) {
+    if (e.name !== "RepositoryNotFoundException") {
+      console.warn(`Failed to delete ECR repository bravocloud-${sanitizedName}:`, e.message);
+    }
+  }
+
   // 1.5 Delete CodeBuild Project
   try {
     const { CodeBuildClient, DeleteProjectCommand } = require("@aws-sdk/client-codebuild");
@@ -829,17 +842,6 @@ export async function deleteProjectInfrastructure(projectName: string, storageIt
   const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
   const repoName = `bravocloud-${sanitizedName}`;
   const clusterName = "bravocloud-cluster";
-
-  // 1. Delete ECR Repository
-  try {
-    const { DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
-    await ecrClient.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
-    console.log(`Deleted ECR repository: ${repoName}`);
-  } catch (e: any) {
-    if (e.name !== "RepositoryNotFoundException") {
-      console.warn(`Failed to delete ECR repository ${repoName}:`, e.message);
-    }
-  }
 
   // 1.5 Delete Compute Infrastructure
   await deleteComputeInfrastructure(projectName);

@@ -123,6 +123,25 @@ router.post('/webhook', async (req: any, res: any) => {
           if (Object.keys(updatePayload).length > 0) {
              await projectRef.update(updatePayload);
           }
+
+          // Execute deferred Agent Transfer teardown
+          if (project.pendingTransferFrom) {
+            if (project.pendingTransferFrom !== 'aws') {
+              const killJob = {
+                agentId: project.pendingTransferFrom,
+                projectId: actualProjectId,
+                action: 'KILL',
+                status: 'Pending',
+                createdAt: new Date().toISOString()
+              };
+              await db.collection('users').doc(project.userId).collection('agent_jobs').add(killJob);
+              console.log(`[Webhook] Deferred KILL job sent to local agent ${project.pendingTransferFrom}`);
+            }
+            const admin = require('firebase-admin');
+            await projectRef.update({
+               pendingTransferFrom: admin.firestore.FieldValue.delete()
+            });
+          }
         } catch (ecsErr) {
           console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
         }

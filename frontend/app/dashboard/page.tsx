@@ -81,6 +81,13 @@ export default function Dashboard() {
     }
 
     fetchDashboardData(token, hasCache);
+
+    // Auto-refresh the dashboard overview every 5 seconds to get latest deployment statuses
+    const intervalId = setInterval(() => {
+      fetchDashboardData(token, true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const fetchDashboardData = (token: string, hasCache: boolean = false) => {

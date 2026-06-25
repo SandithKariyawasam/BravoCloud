@@ -985,27 +985,14 @@ router.patch('/:id', verifyToken, async (req: any, res: any) => {
       }
     }
 
+    if ('agentId' in filteredUpdates && filteredUpdates.agentId !== projectData.agentId) {
+      filteredUpdates.pendingTransferFrom = projectData.agentId || 'aws';
+    }
+
     if (Object.keys(filteredUpdates).length > 0) {
       await projectRef.update(filteredUpdates);
       
-      // Handle Agent Transfer Teardown
-      if ('agentId' in filteredUpdates && filteredUpdates.agentId !== projectData.agentId) {
-        if (!projectData.agentId && filteredUpdates.agentId) {
-          // AWS -> Local: Tear down AWS compute infrastructure
-          const { deleteComputeInfrastructure } = require('../lib/aws');
-          deleteComputeInfrastructure(projectData.name).catch((e: any) => console.error("Compute teardown failed:", e));
-        } else if (projectData.agentId) {
-          // Local -> AWS or Local A -> Local B: Send kill job to the previous agent
-          const killJob = {
-            agentId: projectData.agentId,
-            projectId: projectId,
-            action: 'KILL',
-            status: 'Pending',
-            createdAt: new Date().toISOString()
-          };
-          db.collection('users').doc(userId).collection('agent_jobs').add(killJob).catch((e: any) => console.error("Kill job failed:", e));
-        }
-      }
+      // Deferred Agent Transfer Teardown is now handled in deployment webhooks
       
       // If WAF settings were updated, trigger the AWS WAF sync
       if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {

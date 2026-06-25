@@ -33,6 +33,13 @@ export default function ProjectDetails() {
     }
 
     fetchProjectDetails(hasCache);
+
+    // Auto-refresh the project details every 5 seconds to get latest deployment statuses
+    const intervalId = setInterval(() => {
+      fetchProjectDetails(true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
   }, [projectId]);
 
   const fetchProjectDetails = async (hasCache: boolean = false) => {
