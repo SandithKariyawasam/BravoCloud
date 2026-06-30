@@ -43,6 +43,10 @@ router.get('/settings', verifyToken, async (req: any, res: any) => {
     const drainsSnapshot = await db.collection('users').doc(userId).collection('drains').get();
     const drains = drainsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+    // Fetch alerts
+    const alertsSnapshot = await db.collection('users').doc(userId).collection('alerts').get();
+    const alerts = alertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
     res.json({
       user: {
         id: userDoc.id,
@@ -52,7 +56,8 @@ router.get('/settings', verifyToken, async (req: any, res: any) => {
         avatarUrl: userData?.avatarUrl,
         githubId: userData?.githubId,
         billingPlan: userData?.billingPlan || 'Hobby (Free)',
-        drains
+        drains,
+        alerts
       },
       tokens
     });
@@ -206,6 +211,45 @@ router.delete('/drains/:drainId', verifyToken, async (req: any, res: any) => {
     res.json({ message: 'Log drain deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting drain:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new Alert
+router.post('/alerts', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { event, method, target } = req.body;
+    
+    if (!event || !method || !target) return res.status(400).json({ error: 'Missing required alert fields' });
+
+    const newAlert = {
+      event,
+      method,
+      target,
+      createdAt: new Date().toISOString()
+    };
+
+    const alertRef = await db.collection('users').doc(userId).collection('alerts').add(newAlert);
+    
+    res.json({ message: 'Alert created successfully', alert: { id: alertRef.id, ...newAlert } });
+  } catch (error: any) {
+    console.error('Error creating alert:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an Alert
+router.delete('/alerts/:alertId', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { alertId } = req.params;
+    
+    await db.collection('users').doc(userId).collection('alerts').doc(alertId).delete();
+    
+    res.json({ message: 'Alert deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting alert:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -3,6 +3,7 @@ import { db } from '../lib/firebase';
 import { verifyToken } from '../lib/middleware';
 import crypto from 'crypto';
 import { forwardLogToDrains } from '../lib/drains';
+import { triggerAlert } from '../lib/alerts';
 
 const router = Router();
 
@@ -185,6 +186,14 @@ router.post('/complete', async (req: any, res: any) => {
           updateData.localUrl = req.body.localUrl;
         }
         await db.collection('deployments').doc(jobData.deploymentId).update(updateData);
+        
+        // Trigger alerts
+        const projectName = jobData.projectName || 'Local Project';
+        if (status === 'Success') {
+          triggerAlert(agentData.userId, 'deployment_success', { projectName, deploymentId: jobData.deploymentId, url: publicUrl || req.body.localUrl || 'N/A' });
+        } else {
+          triggerAlert(agentData.userId, 'deployment_failed', { projectName, deploymentId: jobData.deploymentId, error: 'Agent deployment failed' });
+        }
       }
       
       // Execute deferred Agent Transfer teardown if successful

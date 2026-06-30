@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../lib/firebase';
 import { deployToECS, getAwsAccountId } from '../lib/aws';
+import { triggerAlert } from '../lib/alerts';
 import { verifyToken } from '../lib/middleware';
 
 const router = Router();
@@ -80,13 +81,22 @@ router.post('/webhook', async (req: any, res: any) => {
     // If the build succeeded, push to App Runner/ECS
     const actualProjectId = projectId || (updatedDeployment && updatedDeployment.projectId);
     
-    if (status === 'SUCCESS' && actualProjectId) {
+    if (actualProjectId) {
       const projectRef = db.collection('projects').doc(actualProjectId);
       const projectDoc = await projectRef.get();
       
       if (projectDoc.exists) {
         const project = projectDoc.data() as any;
-        try {
+        
+        // Trigger alerts
+        if (status === 'SUCCESS') {
+          triggerAlert(project.userId, 'deployment_success', { projectName: project.name, deploymentId, url: `https://${project.name}-custom-url.bravocloud.io` });
+        } else if (status === 'FAILED') {
+          triggerAlert(project.userId, 'deployment_failed', { projectName: project.name, deploymentId, error: 'AWS CodeBuild deployment failed' });
+        }
+
+        if (status === 'SUCCESS') {
+          try {
           const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
           const region = process.env.AWS_REGION || "us-east-1";
           const accountId = await getAwsAccountId();
@@ -145,10 +155,11 @@ router.post('/webhook', async (req: any, res: any) => {
         } catch (ecsErr) {
           console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
         }
-      }
-    }
+      } // closes if status === 'SUCCESS'
+    } // closes if projectDoc.exists
+  } // closes if actualProjectId
 
-    console.log(`[Webhook] Deployment ${deploymentId} updated to ${status}`);
+  console.log(`[Webhook] Deployment ${deploymentId} updated to ${status}`);
     res.json({ success: true, deployment: updatedDeployment });
   } catch (error) {
     console.error('Webhook Error:', error);

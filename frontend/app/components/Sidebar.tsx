@@ -155,6 +155,8 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
         setActiveSettingsItem("Agent");
       } else if (pathname.endsWith('/drains')) {
         setActiveSettingsItem("Drains");
+      } else if (pathname.endsWith('/alerts')) {
+        setActiveSettingsItem("Alerts");
       } else {
         setActiveSettingsItem("General");
       }
@@ -412,6 +414,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                     if (item === "Invoices") router.push(`/dashboard/settings/invoices`);
                     if (item === "Agent") router.push(`/dashboard/settings/agent`);
                     if (item === "Drains") router.push(`/dashboard/settings/drains`);
+                    if (item === "Alerts") router.push(`/dashboard/settings/alerts`);
                   }
                 }}
                 q={q}
