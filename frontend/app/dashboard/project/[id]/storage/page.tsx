@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { Database, HardDrive, Trash2, CheckCircle2, Copy, AlertCircle, Loader2 } from "lucide-react";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
+import { useConfirm } from "../../../../components/ConfirmContext";
 
 export default function ProjectStoragePage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const projectId = resolvedParams.id;
   const router = useRouter();
+  const confirm = useConfirm();
   
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -106,7 +108,7 @@ export default function ProjectStoragePage({ params }: { params: Promise<{ id: s
   };
 
   const handleDelete = async (storageId: string) => {
-    if (!confirm(`Are you sure you want to remove this storage resource? Note: This deletes the database permanently.`)) return;
+    if (!(await confirm(`Are you sure you want to remove this storage resource? Note: This deletes the database permanently.`))) return;
     
     const token = localStorage.getItem("bravocloud_token");
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useToast } from "../../../components/ToastContext";
+import { useConfirm } from "../../../components/ConfirmContext";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
 
@@ -9,6 +11,8 @@ export default function ProjectDetails() {
   const params = useParams();
   const projectId = params?.id as string;
   const router = useRouter();
+  const confirm = useConfirm();
+  const { error: showError, success: showSuccess } = useToast();
   const [project, setProject] = useState<any>(null);
   const [deployments, setDeployments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,12 +107,14 @@ export default function ProjectDetails() {
           commitHash: 'redeploy-trigger',
           createdAt: new Date().toISOString()
         }, ...deployments]);
+        showSuccess('Redeploy triggered successfully');
       } else {
-        alert('Failed to redeploy project.');
+        const data = await res.json().catch(() => ({}));
+        showError(data.error || 'Failed to redeploy project.');
       }
     } catch (error) {
       console.error('Error redeploying:', error);
-      alert('Error redeploying project.');
+      showError('Error redeploying project.');
     } finally {
       setRedeploying(false);
     }
@@ -119,7 +125,7 @@ export default function ProjectDetails() {
     const previousDeployment = deployments[1];
     if (!previousDeployment || !previousDeployment.commitHash || previousDeployment.commitHash === 'redeploy-trigger' || previousDeployment.commitHash === 'manual') return;
 
-    if (!confirm('Are you sure you want to rollback to the previous deployment?')) return;
+    if (!(await confirm('Are you sure you want to rollback to the previous deployment?'))) return;
 
     setRedeploying(true); // Reuse loading state
 
@@ -134,10 +140,10 @@ export default function ProjectDetails() {
         const err = await res.json();
         throw new Error(err.error || "Failed to rollback");
       }
-      alert("Rollback initiated successfully!");
+      showSuccess("Rollback initiated successfully!");
       fetchProjectDetails();
     } catch (error: any) {
-      alert("Rollback failed: " + error.message);
+      showError("Rollback failed: " + error.message);
     } finally {
       setRedeploying(false);
     }

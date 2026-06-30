@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, User as UserIcon, CreditCard, Key, Trash2, Plus, Copy, CheckCircle2, ShieldAlert } from "lucide-react";
 import BackgroundAnimation from "../../components/BackgroundAnimation";
 import Sidebar from "../../components/Sidebar";
+import { useConfirm } from "../../components/ConfirmContext";
 
 const Github = ({ size = 20, className = "" }: { size?: number; className?: string }) => (
   <svg
@@ -25,6 +26,7 @@ const Github = ({ size = 20, className = "" }: { size?: number; className?: stri
 
 export default function GlobalSettingsPage() {
   const router = useRouter();
+  const confirm = useConfirm();
 
   const [user, setUser] = useState<any>(null);
   const [tokens, setTokens] = useState<any[]>([]);
@@ -175,7 +177,7 @@ export default function GlobalSettingsPage() {
   };
 
   const revokeToken = async (tokenId: string) => {
-    if (!confirm("Are you sure you want to revoke this token? Any scripts using it will immediately fail.")) return;
+    if (!(await confirm("Are you sure you want to revoke this token? Any scripts using it will immediately fail."))) return;
 
     const token = localStorage.getItem("bravocloud_token");
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";

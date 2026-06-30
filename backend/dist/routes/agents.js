@@ -7,6 +7,8 @@ const express_1 = require("express");
 const firebase_1 = require("../lib/firebase");
 const middleware_1 = require("../lib/middleware");
 const crypto_1 = __importDefault(require("crypto"));
+const drains_1 = require("../lib/drains");
+const alerts_1 = require("../lib/alerts");
 const router = (0, express_1.Router)();
 // GET /api/agents
 // List all self-hosted agents for the current user
@@ -134,6 +136,8 @@ router.post('/logs', async (req, res) => {
             log: finalLog,
             timestamp: new Date().toISOString()
         });
+        // Asynchronously forward to log drains
+        (0, drains_1.forwardLogToDrains)(agentData.userId, jobId, finalLog);
         res.json({ success: true });
     }
     catch (error) {
@@ -166,6 +170,46 @@ router.post('/complete', async (req, res) => {
                     updateData.localUrl = req.body.localUrl;
                 }
                 await firebase_1.db.collection('deployments').doc(jobData.deploymentId).update(updateData);
+                // Trigger alerts
+                const projectName = jobData.projectName || 'Local Project';
+                if (status === 'Success') {
+                    (0, alerts_1.triggerAlert)(agentData.userId, 'deployment_success', { projectName, deploymentId: jobData.deploymentId, url: publicUrl || req.body.localUrl || 'N/A' });
+                }
+                else {
+                    (0, alerts_1.triggerAlert)(agentData.userId, 'deployment_failed', { projectName, deploymentId: jobData.deploymentId, error: 'Agent deployment failed' });
+                }
+            }
+            // Execute deferred Agent Transfer teardown if successful
+            if (status === 'Success' && jobData?.projectId) {
+                const projectRef = firebase_1.db.collection('projects').doc(jobData.projectId);
+                const projectDoc = await projectRef.get();
+                if (projectDoc.exists) {
+                    const project = projectDoc.data();
+                    if (project?.pendingTransferFrom) {
+                        if (project.pendingTransferFrom === 'aws') {
+                            // AWS -> Local: Tear down AWS compute infrastructure
+                            const { deleteComputeInfrastructure } = require('../lib/aws');
+                            deleteComputeInfrastructure(project.name).catch((e) => console.error("Compute teardown failed:", e));
+                            console.log(`[Local Agent] Deferred teardown of AWS compute for ${project.name}`);
+                        }
+                        else if (project.pendingTransferFrom !== agentData.agentId) {
+                            // Local -> Local: Send KILL job to previous agent
+                            const killJob = {
+                                agentId: project.pendingTransferFrom,
+                                projectId: jobData.projectId,
+                                action: 'KILL',
+                                status: 'Pending',
+                                createdAt: new Date().toISOString()
+                            };
+                            await firebase_1.db.collection('users').doc(agentData.userId).collection('agent_jobs').add(killJob);
+                            console.log(`[Local Agent] Deferred KILL job sent to local agent ${project.pendingTransferFrom}`);
+                        }
+                        const admin = require('firebase-admin');
+                        await projectRef.update({
+                            pendingTransferFrom: admin.firestore.FieldValue.delete()
+                        });
+                    }
+                }
             }
         }
         // Set agent back to Online (idle) instead of InProgress
@@ -295,6 +339,40 @@ async function sendLog(jobId, logLine) {
 
 async function executeJob(job) {
   console.log("Received job:", job.id);
+  
+  if (job.action === 'KILL' || job.status === 'KILL') {
+    if (runningServers[job.projectId]) {
+      await sendLog(job.id, "Received KILL command. Stopping deployment server...");
+      try {
+        if (process.platform === 'win32') {
+          spawn('taskkill', ['/pid', runningServers[job.projectId].appProcess.pid, '/T', '/F']);
+          if (runningServers[job.projectId].tunnelProcess) {
+            spawn('taskkill', ['/pid', runningServers[job.projectId].tunnelProcess.pid, '/T', '/F']);
+          }
+        } else {
+          runningServers[job.projectId].appProcess.kill();
+          if (runningServers[job.projectId].tunnelProcess) {
+            runningServers[job.projectId].tunnelProcess.kill();
+          }
+        }
+        delete runningServers[job.projectId];
+        await sendLog(job.id, "Server successfully stopped.");
+      } catch (e) {
+        console.error("Failed to kill process", e);
+        await sendLog(job.id, \`Failed to kill process: \${e.message}\`);
+      }
+    } else {
+       await sendLog(job.id, "No server running for this project.");
+    }
+    
+    await fetch(\`\${backendUrl}/api/agents/complete\`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, jobId: job.id, status: "Success" })
+    });
+    return;
+  }
+  
   const repo = job.repository;
   const rootDir = job.rootDir && job.rootDir !== './' ? job.rootDir : '.';
   const installCmd = job.installCommand || 'npm install';
@@ -407,38 +485,50 @@ async function executeJob(job) {
 
       const subdomainSlug = (job.projectName || job.projectId).toLowerCase().replace(/[^a-z0-9]/g, '');
       const customSubdomain = \`bravocloud-\${subdomainSlug}\`;
-      await sendLog(job.id, \`Exposing server to internet via localtunnel on port \${port} with subdomain \${customSubdomain}...\`);
-      const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr, '--subdomain', customSubdomain], { shell: true });
-      
-      runningServers[job.projectId] = { appProcess, tunnelProcess };
 
-      let urlReported = false;
-      let tunnelOutput = "";
-
-      tunnelProcess.stdout.on('data', async (data) => {
-        const output = data.toString();
-        tunnelOutput += output;
-        console.log(\`[TUNNEL] \${output}\`);
+      const startTunnel = async (attempt = 1) => {
+        await sendLog(job.id, \`Exposing server to internet via localtunnel (Attempt \${attempt}) on port \${port} with subdomain \${customSubdomain}...\`);
+        const tunnelProcess = spawn('npx', ['-y', 'localtunnel', '--port', portStr, '--subdomain', customSubdomain], { shell: true });
         
-        const match = tunnelOutput.match(/your url is:\\s*(https?:\\/\\/[^\\s]+)/);
-        if (match && !urlReported) {
-          urlReported = true;
-          const publicUrl = match[1].trim();
-          await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
-          await sendLog(job.id, \`Job finished with status: Success\`);
-          const localUrl = \`http://localhost:\${port}\`;
-          
-          await fetch(\`\${backendUrl}/api/agents/complete\`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl, localUrl })
-          });
-        }
-      });
+        runningServers[job.projectId] = { appProcess, tunnelProcess };
 
-      tunnelProcess.stderr.on('data', (data) => {
-        console.error(\`[TUNNEL ERR] \${data}\`);
-      });
+        let urlReported = false;
+        let tunnelOutput = "";
+
+        tunnelProcess.stdout.on('data', async (data) => {
+          const output = data.toString();
+          tunnelOutput += output;
+          console.log(\`[TUNNEL] \${output}\`);
+          
+          const match = tunnelOutput.match(/your url is:\\s*(https?:\\/\\/[^\\s]+)/);
+          if (match && !urlReported) {
+            urlReported = true;
+            const publicUrl = match[1].trim();
+            
+            if (publicUrl.includes(customSubdomain) || attempt >= 10) {
+              await sendLog(job.id, \`Tunnel established: \${publicUrl}\`);
+              await sendLog(job.id, \`Job finished with status: Success\`);
+              const localUrl = \`http://localhost:\${port}\`;
+              
+              await fetch(\`\${backendUrl}/api/agents/complete\`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token, jobId: job.id, status: "Success", publicUrl, localUrl })
+              });
+            } else {
+              await sendLog(job.id, \`Warning: loca.lt returned a random URL. The requested subdomain is likely in TIME_WAIT. Retrying in 5 seconds...\`);
+              tunnelProcess.kill();
+              setTimeout(() => startTunnel(attempt + 1), 5000);
+            }
+          }
+        });
+
+        tunnelProcess.stderr.on('data', (data) => {
+          console.error(\`[TUNNEL ERR] \${data}\`);
+        });
+      };
+
+      await startTunnel();
     };
 
     if (hasPackageJson) {

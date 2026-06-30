@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { useToast } from "./ToastContext";
 import { ChevronDown, ChevronUp, Plus, X, GitBranch, Settings, Info, Eye, Lock, EyeOff, Globe, Box, Folder } from "lucide-react";
 
 interface Repo {
@@ -20,6 +21,7 @@ interface ProjectConfigModalProps {
 }
 
 export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModalProps) {
+  const { error: showError, success: showSuccess, info: showInfo } = useToast();
   const [buildSettingsOpen, setBuildSettingsOpen] = useState(false);
   const [envVarsOpen, setEnvVarsOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
@@ -207,17 +209,17 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
       
       const data = await response.json();
       if (!response.ok) {
-        setErrorMsg(data.error || 'Deployment creation failed');
+        showError(data.error || 'Deployment creation failed');
         setDeploying(false);
         deployLock.current = false;
       } else {
         if (data.warning) {
-          setWarningMsg(data.warning);
+          showInfo(data.warning);
           setDeploying(false); // Stop spinning so user can read it
           deployLock.current = false;
         } else {
           // Full success
-          setSuccessMsg("Success! Project deployment started.");
+          showSuccess("Success! Project deployment started.");
           setDeploying(false);
           setTimeout(() => {
             onClose(); // Auto close after they read it
@@ -225,7 +227,7 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
         }
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'An unexpected error occurred');
+      showError(err.message || 'An unexpected error occurred');
       setDeploying(false);
       deployLock.current = false;
     }

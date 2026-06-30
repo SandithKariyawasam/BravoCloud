@@ -1,18 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
+import { Loader2 } from "lucide-react";
 import DeploymentsList from "../../../../components/DeploymentsList";
+import { useToast } from "../../../../components/ToastContext";
 
-export default function ProjectDeploymentsPage() {
-  const params = useParams();
-  const projectId = params?.id as string;
+export default function ProjectDeploymentsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const projectId = resolvedParams.id;
   const router = useRouter();
+  const { success: showSuccess, error: showError } = useToast();
+  
   const [project, setProject] = useState<any>(null);
-  const [deployments, setDeployments] = useState([]);
+  const [deployments, setDeployments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [redeploying, setRedeploying] = useState(false);
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -82,6 +87,37 @@ export default function ProjectDeploymentsPage() {
     });
   };
 
+  const handleRedeploy = async () => {
+    if (!project) return;
+    setRedeploying(true);
+
+    try {
+      const token = localStorage.getItem('bravocloud_token');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects/${project.id}/redeploy`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setDeployments([{
+          id: 'temp-' + Date.now(),
+          status: 'QUEUED',
+          commitHash: 'redeploy-trigger',
+          createdAt: new Date().toISOString()
+        }, ...deployments]);
+        showSuccess('Redeploy triggered successfully');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showError(data.error || 'Failed to redeploy project.');
+      }
+    } catch (error) {
+      console.error('Error redeploying:', error);
+      showError('Error redeploying project.');
+    } finally {
+      setRedeploying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-screen bg-black text-white font-sans overflow-hidden">
@@ -134,14 +170,16 @@ export default function ProjectDeploymentsPage() {
             </div>
             
             <button
-              onClick={() => {
-                // Re-trigger deployment logic if needed
-                alert("Redeploy not hooked up in list yet");
-              }}
-              className="px-6 py-2.5 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center gap-2"
+              onClick={handleRedeploy}
+              disabled={redeploying}
+              className="px-6 py-2.5 text-sm font-semibold bg-white text-black rounded-xl hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] flex items-center gap-2 disabled:opacity-50"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-              Redeploy Latest
+              {redeploying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              )}
+              {redeploying ? 'Triggering...' : 'Redeploy Latest'}
             </button>
           </div>
 

@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Globe2, AlertCircle, CheckCircle2, Copy } from "lucide-react";
 import BackgroundAnimation from "../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../components/Sidebar";
+import { useConfirm } from "../../../../components/ConfirmContext";
 
 export default function ProjectDomainsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const projectId = resolvedParams.id;
   const router = useRouter();
+  const confirm = useConfirm();
   
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export default function ProjectDomainsPage({ params }: { params: Promise<{ id: s
   };
 
   const handleDeleteDomain = async (domainString: string) => {
-    if (!confirm(`Are you sure you want to remove ${domainString}?`)) return;
+    if (!(await confirm(`Are you sure you want to remove ${domainString}?`))) return;
     
     const token = localStorage.getItem("bravocloud_token");
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";

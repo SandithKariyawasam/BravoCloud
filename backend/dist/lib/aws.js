@@ -10,6 +10,7 @@ exports.provisionS3Bucket = provisionS3Bucket;
 exports.provisionPostgresDatabase = provisionPostgresDatabase;
 exports.provisionRedisCache = provisionRedisCache;
 exports.getRealAWSUsage = getRealAWSUsage;
+exports.deleteComputeInfrastructure = deleteComputeInfrastructure;
 exports.deleteProjectInfrastructure = deleteProjectInfrastructure;
 exports.deleteStorageResource = deleteStorageResource;
 exports.updateProjectWAF = updateProjectWAF;
@@ -673,19 +674,21 @@ async function getRealAWSUsage(userId) {
         return [];
     }
 }
-async function deleteProjectInfrastructure(projectName, storageItems) {
+async function deleteComputeInfrastructure(projectName) {
     const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    const repoName = `bravocloud-${sanitizedName}`;
     const clusterName = "bravocloud-cluster";
+    const region = process.env.AWS_REGION || "us-east-1";
     // 1. Delete ECR Repository
     try {
-        const { DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
-        await ecrClient.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
+        const { ECRClient, DeleteRepositoryCommand } = require("@aws-sdk/client-ecr");
+        const ecrClientLocal = new ECRClient({ region });
+        const repoName = `bravocloud-${sanitizedName}`;
+        await ecrClientLocal.send(new DeleteRepositoryCommand({ repositoryName: repoName, force: true }));
         console.log(`Deleted ECR repository: ${repoName}`);
     }
     catch (e) {
         if (e.name !== "RepositoryNotFoundException") {
-            console.warn(`Failed to delete ECR repository ${repoName}:`, e.message);
+            console.warn(`Failed to delete ECR repository bravocloud-${sanitizedName}:`, e.message);
         }
     }
     // 1.5 Delete CodeBuild Project
@@ -772,6 +775,13 @@ async function deleteProjectInfrastructure(projectName, storageItems) {
             console.warn(`Failed to delete Log Group for ${sanitizedName}:`, e.message);
         }
     }
+}
+async function deleteProjectInfrastructure(projectName, storageItems) {
+    const sanitizedName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const repoName = `bravocloud-${sanitizedName}`;
+    const clusterName = "bravocloud-cluster";
+    // 1.5 Delete Compute Infrastructure
+    await deleteComputeInfrastructure(projectName);
     // 3. Iterate over storage resources
     for (const item of storageItems) {
         await deleteStorageResource(item);

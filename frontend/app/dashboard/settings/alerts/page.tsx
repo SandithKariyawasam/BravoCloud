@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { Loader2, Bell, Plus, Trash2, Mail, MessageSquare } from "lucide-react";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
+import { useConfirm } from "../../../components/ConfirmContext";
+import { useRouter } from "next/navigation";
 
 export default function AlertsSettingsPage() {
+  const router = useRouter();
+  const confirm = useConfirm();
   const [user, setUser] = useState<any>(null);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +80,7 @@ export default function AlertsSettingsPage() {
   };
 
   const handleDeleteAlert = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this alert?")) return;
+    if (!(await confirm("Are you sure you want to remove this alert?"))) return;
     try {
       const token = localStorage.getItem("bravocloud_token");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -133,7 +137,7 @@ export default function AlertsSettingsPage() {
           <div className="flex flex-col gap-2 pb-6 border-b border-[#27272a] flex-wrap sm:flex-nowrap justify-between items-start sm:items-center sm:flex-row">
             <div>
               <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-                <Bell className="text-yellow-400" size={28} />
+                
                 Alerts
               </h1>
               <p className="text-[#a1a1aa] max-w-2xl text-sm mt-1">

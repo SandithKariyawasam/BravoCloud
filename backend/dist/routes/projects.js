@@ -362,6 +362,24 @@ router.post('/:id/redeploy', middleware_1.verifyToken, async (req, res) => {
         try {
             if (projectData.agentId) {
                 // Route to self-hosted agent
+                // First check if agent is online
+                const agentDoc = await firebase_1.db.collection('users').doc(userId).collection('agents').doc(projectData.agentId).get();
+                if (agentDoc.exists) {
+                    const agentData = agentDoc.data();
+                    let isOffline = !agentData.lastSeen;
+                    if (agentData.lastSeen) {
+                        const lastSeenMs = new Date(agentData.lastSeen).getTime();
+                        const nowMs = new Date().getTime();
+                        if (nowMs - lastSeenMs > 30000) {
+                            isOffline = true;
+                        }
+                    }
+                    if (isOffline) {
+                        // Cleanup the queued deployment we just created
+                        await deploymentRef.delete();
+                        return res.status(400).json({ error: 'Agent offline. Redeploy not available.' });
+                    }
+                }
                 const newJob = {
                     agentId: projectData.agentId,
                     projectId: projectData.id,
@@ -844,60 +862,12 @@ router.patch('/:id', middleware_1.verifyToken, async (req, res) => {
                 filteredUpdates[key] = updates[key] === "" ? null : updates[key];
             }
         }
+        if ('agentId' in filteredUpdates && filteredUpdates.agentId !== projectData.agentId) {
+            filteredUpdates.pendingTransferFrom = projectData.agentId || 'aws';
+        }
         if (Object.keys(filteredUpdates).length > 0) {
             await projectRef.update(filteredUpdates);
-            // If Agent Routing was updated, handle the transfer
-            if (filteredUpdates.agentId !== undefined && filteredUpdates.agentId !== projectData.agentId) {
-                try {
-                    const userDoc = await firebase_1.db.collection('users').doc(userId).get();
-                    const user = userDoc.data();
-                    const deploymentRef = firebase_1.db.collection('deployments').doc();
-                    const deploymentData = {
-                        id: deploymentRef.id,
-                        projectId: projectData.id,
-                        status: 'QUEUED',
-                        commitHash: 'routing-transfer',
-                        createdAt: new Date().toISOString()
-                    };
-                    await deploymentRef.set(deploymentData);
-                    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-                    const host = req.headers.host;
-                    const dynamicBackendUrl = `${protocol}://${host}`;
-                    const webhookUrl = `${process.env.BACKEND_URL || dynamicBackendUrl}/api/deployments/webhook`;
-                    // Ensure ECR exists just in case (non-blocking)
-                    const { createEcrRepository } = require('../lib/aws');
-                    createEcrRepository(projectData.name, userId).catch(() => { });
-                    if (filteredUpdates.agentId) {
-                        // Transferring to Self-Hosted
-                        // Pause AWS compute to save resources instantly
-                        const { setProjectComputeState } = require('../lib/aws');
-                        setProjectComputeState(projectData.name, true).catch((e) => console.error("Compute pause failed:", e));
-                        const newJob = {
-                            agentId: filteredUpdates.agentId,
-                            projectId: projectData.id,
-                            deploymentId: deploymentRef.id,
-                            repository: projectData.repoUrl,
-                            projectName: projectData.name,
-                            rootDir: projectData.rootDir,
-                            installCommand: projectData.installCommand,
-                            buildCommand: projectData.buildCommand,
-                            status: 'Pending',
-                            createdAt: new Date().toISOString()
-                        };
-                        await firebase_1.db.collection('users').doc(userId).collection('agent_jobs').add(newJob);
-                        await deploymentRef.update({ status: 'BUILDING' });
-                    }
-                    else {
-                        // Transferring to AWS
-                        const { startCodeBuildJob } = require('../lib/aws');
-                        startCodeBuildJob(projectData.name, user.githubToken, projectData.repoUrl, projectData.branch || 'main', projectData.framework, projectData.buildCommand, projectData.installCommand, projectData.outputDirectory, projectData.rootDir, webhookUrl, deploymentRef.id, userId).catch(() => { });
-                        await deploymentRef.update({ status: 'BUILDING' });
-                    }
-                }
-                catch (err) {
-                    console.error("Transfer trigger failed:", err);
-                }
-            }
+            // Deferred Agent Transfer Teardown is now handled in deployment webhooks
             // If WAF settings were updated, trigger the AWS WAF sync
             if (filteredUpdates.ipAccessMode || filteredUpdates.ipList) {
                 const { updateProjectWAF } = require('../lib/aws');

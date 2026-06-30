@@ -6,6 +6,7 @@ import Image from "next/image";
 import BackgroundAnimation from "../components/BackgroundAnimation";
 
 import Sidebar from "../components/Sidebar";
+import { useToast } from "../components/ToastContext";
 import ProjectConfigModal from "../components/ProjectConfigModal";
 
 interface Repo {
@@ -28,6 +29,7 @@ interface UserProfile {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { error: showError, success: showSuccess } = useToast();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,12 +107,18 @@ export default function Dashboard() {
       fetch(`${apiUrl}/api/projects`, { headers })
     ])
       .then(async ([reposRes, userRes, projectsRes]) => {
-        if (!reposRes.ok || !userRes.ok) {
-          const errorText = await userRes.text();
-          throw new Error(`Auth Error: ${userRes.status} - ${errorText}`);
+        if (!userRes.ok) {
+          throw new Error(`Auth Error: Session expired. Please log in again.`);
+        }
+        if (!reposRes.ok) {
+          console.error("Failed to fetch GitHub repos");
+          // Don't throw here, just proceed with empty repos so dashboard still loads
         }
 
-        const reposData = await reposRes.json();
+        let reposData = { repos: [] };
+        if (reposRes.ok) {
+          reposData = await reposRes.json();
+        }
         const userData = await userRes.json();
 
         let projectsData = { projects: [] };
@@ -136,7 +144,7 @@ export default function Dashboard() {
       })
       .catch((err) => {
         console.error(err);
-        alert(err.message);
+        showError(err.message);
         // Temporarily disabling the redirect so you can inspect the console!
         // window.location.href = "/";
       });
@@ -160,8 +168,9 @@ export default function Dashboard() {
 
       // Refresh dashboard data to show QUEUED status
       if (token) fetchDashboardData(token);
+      showSuccess("Redeployment triggered successfully");
     } catch (error: any) {
-      alert("Redeploy failed: " + error.message);
+      showError("Redeploy failed: " + error.message);
     } finally {
       setRedeployingProjectId(null);
     }

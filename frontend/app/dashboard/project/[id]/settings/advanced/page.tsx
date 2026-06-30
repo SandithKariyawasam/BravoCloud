@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { Save, Loader2, Power, PauseCircle, Send, AlertTriangle, CheckCircle2, Activity, Database, Webhook } from "lucide-react";
 import BackgroundAnimation from "../../../../../components/BackgroundAnimation";
 import Sidebar from "../../../../../components/Sidebar";
+import { useConfirm } from "../../../../../components/ConfirmContext";
 
 export default function AdvancedSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params);
   const projectId = resolvedParams.id;
   const router = useRouter();
+  const confirm = useConfirm();
   
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -119,12 +121,12 @@ export default function AdvancedSettingsPage({ params }: { params: Promise<{ id:
     handleUpdate('isPaused', newValue, 'pause');
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     if (!transferEmail || !transferEmail.includes("@")) {
       alert("Please enter a valid email address.");
       return;
     }
-    const confirmTransfer = confirm(`Are you sure you want to transfer ownership of ${project?.name} to ${transferEmail}? You will lose access to this project.`);
+    const confirmTransfer = await confirm(`Are you sure you want to transfer ownership of ${project?.name} to ${transferEmail}? You will lose access to this project.`);
     if (confirmTransfer) {
       handleUpdate('ownerEmail', transferEmail, 'transfer').then(() => {
         alert("Project transferred successfully.");

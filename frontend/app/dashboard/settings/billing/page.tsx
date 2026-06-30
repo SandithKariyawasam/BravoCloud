@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { Loader2, CreditCard, Building2, Plus, Zap, ShieldCheck, ArrowRight, X, Trash2 } from "lucide-react";
 import BackgroundAnimation from "../../../components/BackgroundAnimation";
 import Sidebar from "../../../components/Sidebar";
+import { useConfirm } from "../../../components/ConfirmContext";
 
 export default function BillingSettingsPage() {
   const router = useRouter();
+  const confirm = useConfirm();
 
   const [user, setUser] = useState<any>(null);
   const [billingData, setBillingData] = useState<any>(null);
@@ -105,7 +107,7 @@ export default function BillingSettingsPage() {
   };
 
   const handleDeleteCard = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payment method?')) return;
+    if (!(await confirm('Are you sure you want to delete this payment method?'))) return;
     try {
       const token = localStorage.getItem("bravocloud_token");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";

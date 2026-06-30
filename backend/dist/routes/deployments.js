@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const firebase_1 = require("../lib/firebase");
 const aws_1 = require("../lib/aws");
+const alerts_1 = require("../lib/alerts");
 const middleware_1 = require("../lib/middleware");
 const router = (0, express_1.Router)();
 // Get all deployments across all projects for the authenticated user
@@ -66,48 +67,75 @@ router.post('/webhook', async (req, res) => {
         const updatedDeployment = updatedDoc.data();
         // If the build succeeded, push to App Runner/ECS
         const actualProjectId = projectId || (updatedDeployment && updatedDeployment.projectId);
-        if (status === 'SUCCESS' && actualProjectId) {
+        if (actualProjectId) {
             const projectRef = firebase_1.db.collection('projects').doc(actualProjectId);
             const projectDoc = await projectRef.get();
             if (projectDoc.exists) {
                 const project = projectDoc.data();
-                try {
-                    const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
-                    const region = process.env.AWS_REGION || "us-east-1";
-                    const accountId = await (0, aws_1.getAwsAccountId)();
-                    const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
-                    const envs = project.envVars ? project.envVars : undefined;
-                    const framework = (project.framework || "").toLowerCase();
-                    let targetPort = "3000";
-                    if (framework.includes("react") || framework.includes("vite") || framework.includes("vue") || framework.includes("svelte") || framework.includes("angular")) {
-                        targetPort = "80";
-                    }
-                    else if (framework.includes("python") || framework.includes("django") || framework.includes("flask") || framework.includes("fastapi")) {
-                        targetPort = "8000";
-                    }
-                    const ecsUrl = await (0, aws_1.deployToECS)(project.name, imageUri, envs, targetPort);
-                    console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
-                    // Wait briefly for the new task to stabilize, then get its IP
-                    await new Promise(r => setTimeout(r, 10000));
-                    const { getEcsTaskPublicIp } = require('../lib/aws');
-                    const taskIp = await getEcsTaskPublicIp(project.name);
-                    // Store the live URL and new IP on the project document
-                    const updatePayload = { port: parseInt(targetPort) };
-                    if (ecsUrl) {
-                        updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
-                    }
-                    if (taskIp) {
-                        updatePayload.taskIp = taskIp;
-                    }
-                    if (Object.keys(updatePayload).length > 0) {
-                        await projectRef.update(updatePayload);
-                    }
+                // Trigger alerts
+                if (status === 'SUCCESS') {
+                    (0, alerts_1.triggerAlert)(project.userId, 'deployment_success', { projectName: project.name, deploymentId, url: `https://${project.name}-custom-url.bravocloud.io` });
                 }
-                catch (ecsErr) {
-                    console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
+                else if (status === 'FAILED') {
+                    (0, alerts_1.triggerAlert)(project.userId, 'deployment_failed', { projectName: project.name, deploymentId, error: 'AWS CodeBuild deployment failed' });
                 }
-            }
-        }
+                if (status === 'SUCCESS') {
+                    try {
+                        const ecrRepoName = `bravocloud-${project.name.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+                        const region = process.env.AWS_REGION || "us-east-1";
+                        const accountId = await (0, aws_1.getAwsAccountId)();
+                        const imageUri = `${accountId}.dkr.ecr.${region}.amazonaws.com/${ecrRepoName}:latest`;
+                        const envs = project.envVars ? project.envVars : undefined;
+                        const framework = (project.framework || "").toLowerCase();
+                        let targetPort = "3000";
+                        if (framework.includes("react") || framework.includes("vite") || framework.includes("vue") || framework.includes("svelte") || framework.includes("angular")) {
+                            targetPort = "80";
+                        }
+                        else if (framework.includes("python") || framework.includes("django") || framework.includes("flask") || framework.includes("fastapi")) {
+                            targetPort = "8000";
+                        }
+                        const ecsUrl = await (0, aws_1.deployToECS)(project.name, imageUri, envs, targetPort);
+                        console.log(`[Webhook] ECS Fargate Deployed! Live URL: ${ecsUrl}`);
+                        // Wait briefly for the new task to stabilize, then get its IP
+                        await new Promise(r => setTimeout(r, 10000));
+                        const { getEcsTaskPublicIp } = require('../lib/aws');
+                        const taskIp = await getEcsTaskPublicIp(project.name);
+                        // Store the live URL and new IP on the project document
+                        const updatePayload = { port: parseInt(targetPort) };
+                        if (ecsUrl) {
+                            updatePayload.subdomain = ecsUrl.replace('http://', '').replace('https://', '').split('/')[0];
+                        }
+                        if (taskIp) {
+                            updatePayload.taskIp = taskIp;
+                        }
+                        if (Object.keys(updatePayload).length > 0) {
+                            await projectRef.update(updatePayload);
+                        }
+                        // Execute deferred Agent Transfer teardown
+                        if (project.pendingTransferFrom) {
+                            if (project.pendingTransferFrom !== 'aws') {
+                                const killJob = {
+                                    agentId: project.pendingTransferFrom,
+                                    projectId: actualProjectId,
+                                    action: 'KILL',
+                                    status: 'Pending',
+                                    createdAt: new Date().toISOString()
+                                };
+                                await firebase_1.db.collection('users').doc(project.userId).collection('agent_jobs').add(killJob);
+                                console.log(`[Webhook] Deferred KILL job sent to local agent ${project.pendingTransferFrom}`);
+                            }
+                            const admin = require('firebase-admin');
+                            await projectRef.update({
+                                pendingTransferFrom: admin.firestore.FieldValue.delete()
+                            });
+                        }
+                    }
+                    catch (ecsErr) {
+                        console.error('[Webhook] Failed to deploy to ECS:', ecsErr);
+                    }
+                } // closes if status === 'SUCCESS'
+            } // closes if projectDoc.exists
+        } // closes if actualProjectId
         console.log(`[Webhook] Deployment ${deploymentId} updated to ${status}`);
         res.json({ success: true, deployment: updatedDeployment });
     }

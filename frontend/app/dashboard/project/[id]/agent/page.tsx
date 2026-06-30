@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/app/components/Sidebar";
 import BackgroundAnimation from "@/app/components/BackgroundAnimation";
-import { Loader2, Cpu, Save } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { useConfirm } from "@/app/components/ConfirmContext";
 
-export default function ProjectAgentPage() {
-  const { id } = useParams();
-  const projectId = id as string;
+export default function ProjectAgentPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const projectId = resolvedParams.id;
   const router = useRouter();
+  const confirm = useConfirm();
 
   const [user, setUser] = useState<any>(null);
   const [project, setProject] = useState<any>(null);
@@ -80,7 +82,7 @@ export default function ProjectAgentPage() {
       const confirmMsg = isAwsToLocal 
         ? "WARNING: Transferring to a Local Agent will shut down the existing AWS compute infrastructure. Proceed?"
         : "WARNING: Transferring away from this Local Agent will kill the running project process on that machine. Proceed?";
-      if (!window.confirm(confirmMsg)) return;
+      if (!(await confirm(confirmMsg))) return;
     }
 
     setSaving(true);

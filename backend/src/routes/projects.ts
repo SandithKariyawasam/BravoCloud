@@ -427,6 +427,25 @@ router.post('/:id/redeploy', verifyToken, async (req: any, res: any) => {
     try {
       if (projectData.agentId) {
         // Route to self-hosted agent
+        // First check if agent is online
+        const agentDoc = await db.collection('users').doc(userId).collection('agents').doc(projectData.agentId).get();
+        if (agentDoc.exists) {
+          const agentData = agentDoc.data() as any;
+          let isOffline = !agentData.lastSeen;
+          if (agentData.lastSeen) {
+            const lastSeenMs = new Date(agentData.lastSeen).getTime();
+            const nowMs = new Date().getTime();
+            if (nowMs - lastSeenMs > 30000) {
+              isOffline = true;
+            }
+          }
+          if (isOffline) {
+            // Cleanup the queued deployment we just created
+            await deploymentRef.delete();
+            return res.status(400).json({ error: 'Agent offline. Redeploy not available.' });
+          }
+        }
+
         const newJob = {
           agentId: projectData.agentId,
           projectId: projectData.id,
