@@ -39,6 +39,10 @@ router.get('/settings', verifyToken, async (req: any, res: any) => {
       return { id: doc.id, name: data.name, createdAt: data.createdAt, lastUsed: data.lastUsed };
     });
 
+    // Fetch log drains
+    const drainsSnapshot = await db.collection('users').doc(userId).collection('drains').get();
+    const drains = drainsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
     res.json({
       user: {
         id: userDoc.id,
@@ -47,7 +51,8 @@ router.get('/settings', verifyToken, async (req: any, res: any) => {
         email: userData?.email,
         avatarUrl: userData?.avatarUrl,
         githubId: userData?.githubId,
-        billingPlan: userData?.billingPlan || 'Hobby (Free)'
+        billingPlan: userData?.billingPlan || 'Hobby (Free)',
+        drains
       },
       tokens
     });
@@ -161,6 +166,46 @@ router.delete('/tokens/:tokenId', verifyToken, async (req: any, res: any) => {
     res.json({ message: 'Token revoked successfully' });
   } catch (error: any) {
     console.error('Error revoking token:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new Log Drain
+router.post('/drains', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { name, type, url, secretToken } = req.body;
+    
+    if (!name || !type || !url) return res.status(400).json({ error: 'Missing required drain fields' });
+
+    const newDrain = {
+      name,
+      type,
+      url,
+      secretToken: secretToken || null,
+      createdAt: new Date().toISOString()
+    };
+
+    const drainRef = await db.collection('users').doc(userId).collection('drains').add(newDrain);
+    
+    res.json({ message: 'Log drain created successfully', drain: { id: drainRef.id, ...newDrain } });
+  } catch (error: any) {
+    console.error('Error creating drain:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a Log Drain
+router.delete('/drains/:drainId', verifyToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id;
+    const { drainId } = req.params;
+    
+    await db.collection('users').doc(userId).collection('drains').doc(drainId).delete();
+    
+    res.json({ message: 'Log drain deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting drain:', error);
     res.status(500).json({ error: error.message });
   }
 });
