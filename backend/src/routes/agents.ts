@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../lib/firebase';
 import { verifyToken } from '../lib/middleware';
 import crypto from 'crypto';
+import { forwardLogToDrains } from '../lib/drains';
 
 const router = Router();
 
@@ -146,6 +147,9 @@ router.post('/logs', async (req: any, res: any) => {
       log: finalLog,
       timestamp: new Date().toISOString()
     });
+
+    // Asynchronously forward to log drains
+    forwardLogToDrains(agentData.userId, jobId, finalLog);
 
     res.json({ success: true });
   } catch (error: any) {
