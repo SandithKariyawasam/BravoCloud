@@ -1123,10 +1123,20 @@ phases:
       - echo "node_modules" > .dockerignore
       - echo ".next" >> .dockerignore
       - echo ".git" >> .dockerignore
+    finally:
+      - |
+        if [ $CODEBUILD_BUILD_SUCCEEDING -eq 0 ]; then
+          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"FAILED\\"}"
+        fi
   build:
     commands:
       - echo "Building the Docker image..."
       - docker build -t $ECR_URI:latest -t $ECR_URI:$COMMIT_HASH .
+    finally:
+      - |
+        if [ $CODEBUILD_BUILD_SUCCEEDING -eq 0 ]; then
+          curl -X POST $WEBHOOK_URL -H "Content-Type: application/json" -d "{\\"deploymentId\\":\\"$DEPLOYMENT_ID\\", \\"status\\":\\"FAILED\\"}"
+        fi
   post_build:
     commands:
       - echo "Build completed! Pushing to ECR..."

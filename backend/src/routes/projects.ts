@@ -67,7 +67,7 @@ router.post('/', verifyToken, async (req: any, res: any) => {
     const projectData = {
       id: projectRef.id,
       name,
-      repoUrl,
+      repoUrl: `https://github.com/${repoOwner}/${repoName}`,
       framework,
       branch,
       rootDir,
