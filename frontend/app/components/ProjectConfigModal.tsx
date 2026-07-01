@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useToast } from "./ToastContext";
-import { ChevronDown, ChevronUp, Plus, X, GitBranch, Settings, Info, Eye, Lock, EyeOff, Globe, Box, Folder } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, X, GitBranch, Settings, Info, Eye, Lock, EyeOff, Globe, Box, Folder, Loader2, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
 
 interface Repo {
   id: number;
@@ -26,6 +26,11 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
   const [envVarsOpen, setEnvVarsOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [showEnvValue, setShowEnvValue] = useState(false);
+
+  // AWS Deployment Polling State
+  const [deploymentState, setDeploymentState] = useState<'idle' | 'polling' | 'success' | 'error'>('idle');
+  const [createdProject, setCreatedProject] = useState<any>(null);
+  const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null);
 
   // Form State
   const [projectName, setProjectName] = useState(repo.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"));
@@ -221,9 +226,17 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
           // Full success
           showSuccess("Success! Project deployment started.");
           setDeploying(false);
-          setTimeout(() => {
-            onClose(); // Auto close after they read it
-          }, 3000);
+          
+          if (!payload.agentId) {
+            // AWS Deployment: Transition to polling state instead of closing
+            setCreatedProject(data.project);
+            setDeploymentState('polling');
+          } else {
+            // Self-hosted Agent: Close immediately
+            setTimeout(() => {
+              onClose();
+            }, 3000);
+          }
         }
       }
     } catch (err: any) {
@@ -243,17 +256,118 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
     setEnvVars(newVars);
   };
 
+  // Poll for AWS Deployment Status
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (deploymentState === 'polling' && createdProject) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch(`${apiUrl}/api/projects/${createdProject.id}`, { headers: getHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.project && data.project.subdomain) {
+              setDeploymentUrl(`https://${data.project.subdomain}.bravocloud.net`);
+              setDeploymentState('success');
+              clearInterval(interval);
+            }
+          }
+          
+          // Check deployments to see if it failed
+          const depRes = await fetch(`${apiUrl}/api/projects/${createdProject.id}/deployments`, { headers: getHeaders() });
+          if (depRes.ok) {
+            const depData = await depRes.json();
+            const latestDep = depData.deployments?.[0];
+            if (latestDep && latestDep.status === 'FAILED') {
+              setDeploymentState('error');
+              clearInterval(interval);
+            }
+          }
+        } catch (e) {
+          console.error("Polling error:", e);
+        }
+      }, 10000); // Poll every 10 seconds
+    }
+    return () => clearInterval(interval);
+  }, [deploymentState, createdProject]);
+
   return (
     <div className="fixed inset-0 z-[100] flex justify-center items-start overflow-y-auto bg-black/60 backdrop-blur-sm pt-12 pb-24">
       {/* Modal Container */}
-      <div className="w-full max-w-3xl bg-[#0a0a0a] border border-[#27272a] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col relative animate-slide-up-fade">
+      <div className={`w-full bg-[#0a0a0a] border border-[#27272a] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col relative animate-slide-up-fade transition-all duration-500 ${deploymentState !== 'idle' ? 'max-w-md' : 'max-w-3xl'}`}>
 
+        {deploymentState !== 'idle' ? (
+          <div className="flex flex-col items-center justify-center p-10 text-center">
+            {deploymentState === 'polling' && (
+              <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+                <div className="relative mb-6">
+                  <div className="absolute inset-0 bg-white/10 rounded-full blur-xl animate-pulse"></div>
+                  <Loader2 className="w-12 h-12 text-white animate-spin relative z-10" />
+                </div>
+                <h2 className="text-2xl font-semibold mb-3 tracking-tight text-white">Building your project...</h2>
+                <p className="text-[#a1a1aa] max-w-sm text-sm">
+                  We are deploying your project to BravoCloud AWS Infrastructure. This typically takes 3 to 5 minutes.
+                </p>
+                <button 
+                  onClick={onClose}
+                  className="mt-8 text-xs text-[#71717a] hover:text-white transition-colors underline underline-offset-4"
+                >
+                  Close & Go to Dashboard in Background
+                </button>
+              </div>
+            )}
+            
+            {deploymentState === 'success' && (
+              <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-5">
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                </div>
+                <h2 className="text-2xl font-semibold mb-3 tracking-tight text-white">Deployment Successful!</h2>
+                <p className="text-[#a1a1aa] mb-6 text-sm">Your project is now live on BravoCloud.</p>
+                
+                <a 
+                  href={deploymentUrl!} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="mb-6 px-5 py-2.5 bg-[#18181b] border border-[#27272a] rounded-xl flex items-center gap-2.5 hover:bg-[#27272a] transition-all group"
+                >
+                  <Globe className="w-4 h-4 text-gray-400 group-hover:text-white" />
+                  <span className="font-mono text-white text-sm">{deploymentUrl}</span>
+                  <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-white" />
+                </a>
+
+                <button 
+                  onClick={onClose}
+                  className="px-6 py-2.5 text-sm bg-white text-black font-semibold rounded-xl hover:bg-gray-200 transition-colors shadow-lg hover:shadow-white/20"
+                >
+                  Go to Dashboard
+                </button>
+              </div>
+            )}
+
+            {deploymentState === 'error' && (
+              <div className="flex flex-col items-center animate-in fade-in zoom-in duration-500">
+                <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-5">
+                  <AlertCircle className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-2xl font-semibold mb-3 tracking-tight text-white">Deployment Failed</h2>
+                <p className="text-[#a1a1aa] mb-6 text-sm">Something went wrong during the AWS build process. Please check the logs in your dashboard.</p>
+                <button 
+                  onClick={onClose}
+                  className="px-6 py-2.5 text-sm bg-white text-black font-semibold rounded-xl hover:bg-gray-200 transition-colors"
+                >
+                  Close to Dashboard
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-[#a1a1aa] hover:text-white hover:bg-[#27272a] rounded-md transition-all"
+          className="absolute right-6 top-6 text-[#71717a] hover:text-white transition-colors z-40 bg-[#18181b] p-1.5 rounded-md border border-[#27272a] hover:bg-[#27272a]"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <X size={20} />
         </button>
 
         {/* Error / Warning / Success Banners */}
@@ -749,6 +863,8 @@ export default function ProjectConfigModal({ repo, onClose }: ProjectConfigModal
           )}
         </div>
 
+            </>
+          )}
       </div>
     </div>
   );
