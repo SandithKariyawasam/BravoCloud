@@ -17,10 +17,6 @@ import { db } from './lib/firebase';
 import { startMonthlyInvoiceCron } from './jobs/monthlyInvoices';
 import path from 'path';
 
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
-
 const app = express();
 const PORT = process.env.PORT || 4000;
 

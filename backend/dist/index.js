@@ -20,9 +20,6 @@ const billing_1 = __importDefault(require("./routes/billing"));
 const agents_1 = __importDefault(require("./routes/agents"));
 const monthlyInvoices_1 = require("./jobs/monthlyInvoices");
 const path_1 = __importDefault(require("path"));
-if (process.env.NODE_ENV !== 'production') {
-    require('dotenv').config();
-}
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
 app.use((0, cors_1.default)({
