@@ -139,6 +139,8 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
         setActiveSettingsItem("Git");
       } else if (pathname.endsWith('/security')) {
         setActiveSettingsItem("Security");
+      } else if (pathname.endsWith('/webhooks')) {
+        setActiveSettingsItem("Webhooks");
       } else if (pathname.endsWith('/serverless')) {
         setActiveSettingsItem("Serverless Functions");
       } else if (pathname.endsWith('/cron')) {
@@ -389,7 +391,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
 
             {(isProjectView ? [
               "General", "Git",
-              "Security", "Serverless Functions", "Cron Jobs", "Edge Network", "Advanced"
+              "Security", "Webhooks", "Serverless Functions", "Cron Jobs", "Edge Network", "Advanced"
             ] : [
               "General", "Billing", "Invoices", "Agent", "Drains", "Alerts", "Webhooks",
               "Security & Privacy", "Deployment Protection", "Activity", "My Notifications"
@@ -404,6 +406,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                     if (item === "General") router.push(`/dashboard/project/${projectId}/settings`);
                     if (item === "Git") router.push(`/dashboard/project/${projectId}/settings/git`);
                     if (item === "Security") router.push(`/dashboard/project/${projectId}/settings/security`);
+                    if (item === "Webhooks") router.push(`/dashboard/project/${projectId}/settings/webhooks`);
                     if (item === "Serverless Functions") router.push(`/dashboard/project/${projectId}/settings/serverless`);
                     if (item === "Cron Jobs") router.push(`/dashboard/project/${projectId}/settings/cron`);
                     if (item === "Edge Network") router.push(`/dashboard/project/${projectId}/settings/edge`);
@@ -415,6 +418,7 @@ export default function Sidebar({ user: propUser, isDropdownOpen: propIsDropdown
                     if (item === "Agent") router.push(`/dashboard/settings/agent`);
                     if (item === "Drains") router.push(`/dashboard/settings/drains`);
                     if (item === "Alerts") router.push(`/dashboard/settings/alerts`);
+                    if (item === "Webhooks") router.push(`/dashboard/settings/webhooks`);
                   }
                 }}
                 q={q}

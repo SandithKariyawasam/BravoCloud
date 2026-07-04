@@ -149,6 +149,8 @@ router.post('/', verifyToken, async (req: any, res: any) => {
       finalDeploymentData.status = 'BUILDING';
       // We don't have a commit hash yet, but we can set it later if needed or leave it as initial-commit
       await deploymentRef.update({ status: 'BUILDING' });
+      const { fireProjectWebhooks } = require('../lib/webhooks');
+      fireProjectWebhooks(projectRef.id, 'deployment.started', { projectName: projectData.name, deploymentId: deploymentRef.id, status: 'BUILDING' });
     } catch (awsError: any) {
       console.error('Failed to trigger CodeBuild:', awsError);
       finalDeploymentData.status = 'FAILED';
@@ -1275,6 +1277,67 @@ router.get('/:id/detect-functions', verifyToken, async (req: any, res: any) => {
   }
 });
 
+// --- Webhooks CRUD ---
+router.get('/:id/webhooks', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    if (projectDoc.data()?.userId !== req.user.id) return res.status(403).json({ error: 'Unauthorized' });
+
+    const snapshot = await db.collection('projects').doc(projectId).collection('webhooks').get();
+    const webhooks = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+    res.json({ webhooks });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:id/webhooks', verifyToken, async (req: any, res: any) => {
+  try {
+    const projectId = req.params.id;
+    const { url, secret, events } = req.body;
+    
+    if (!url || !events || !Array.isArray(events)) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    if (projectDoc.data()?.userId !== req.user.id) return res.status(403).json({ error: 'Unauthorized' });
+
+    const webhookRef = db.collection('projects').doc(projectId).collection('webhooks').doc();
+    const webhookData = {
+      url,
+      secret: secret || '',
+      events,
+      createdAt: new Date().toISOString()
+    };
+    
+    await webhookRef.set(webhookData);
+    res.json({ success: true, webhook: { id: webhookRef.id, ...webhookData } });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:id/webhooks/:webhookId', verifyToken, async (req: any, res: any) => {
+  try {
+    const { id: projectId, webhookId } = req.params;
+    
+    const projectDoc = await db.collection('projects').doc(projectId).get();
+    if (!projectDoc.exists) return res.status(404).json({ error: 'Project not found' });
+    if (projectDoc.data()?.userId !== req.user.id) return res.status(403).json({ error: 'Unauthorized' });
+
+    await db.collection('projects').doc(projectId).collection('webhooks').doc(webhookId).delete();
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// ---------------------
+
+
 // Delete project
 router.delete('/:id', verifyToken, async (req: any, res: any) => {
   try {
@@ -1307,6 +1370,12 @@ router.delete('/:id', verifyToken, async (req: any, res: any) => {
       batch.delete(doc.ref);
     });
     await batch.commit();
+
+    // 4. Delete Webhooks
+    const webhooksSnapshot = await db.collection('projects').doc(projectId).collection('webhooks').get();
+    const webhookBatch = db.batch();
+    webhooksSnapshot.docs.forEach((doc: any) => webhookBatch.delete(doc.ref));
+    await webhookBatch.commit();
 
     res.json({ success: true });
   } catch (error: any) {

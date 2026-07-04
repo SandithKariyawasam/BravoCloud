@@ -88,11 +88,15 @@ router.post('/webhook', async (req: any, res: any) => {
       if (projectDoc.exists) {
         const project = projectDoc.data() as any;
         
-        // Trigger alerts
+        // Trigger alerts and Webhooks
         if (status === 'SUCCESS') {
           triggerAlert(project.userId, 'deployment_success', { projectName: project.name, deploymentId, url: `https://${project.name}-custom-url.bravocloud.io` });
+          const { fireProjectWebhooks } = require('../lib/webhooks');
+          fireProjectWebhooks(actualProjectId, 'deployment.success', { projectName: project.name, deploymentId, status: 'SUCCESS' });
         } else if (status === 'FAILED') {
           triggerAlert(project.userId, 'deployment_failed', { projectName: project.name, deploymentId, error: 'AWS CodeBuild deployment failed' });
+          const { fireProjectWebhooks } = require('../lib/webhooks');
+          fireProjectWebhooks(actualProjectId, 'deployment.failed', { projectName: project.name, deploymentId, status: 'FAILED' });
         }
 
         if (status === 'SUCCESS') {
