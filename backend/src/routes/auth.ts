@@ -2,10 +2,7 @@ import { Router } from 'express';
 import passport from 'passport';
 import { Strategy as GitHubStrategy } from 'passport-github2';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
 import { verifyToken } from '../lib/middleware';
-
-dotenv.config();
 
 const router = Router();
 

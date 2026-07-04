@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const passport_1 = __importDefault(require("passport"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const github_1 = __importDefault(require("./routes/github"));
 const projects_1 = __importDefault(require("./routes/projects"));
@@ -21,7 +20,9 @@ const billing_1 = __importDefault(require("./routes/billing"));
 const agents_1 = __importDefault(require("./routes/agents"));
 const monthlyInvoices_1 = require("./jobs/monthlyInvoices");
 const path_1 = __importDefault(require("path"));
-dotenv_1.default.config();
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config();
+}
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
 app.use((0, cors_1.default)({

@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import passport from 'passport';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import githubRoutes from './routes/github';
 import projectsRoutes from './routes/projects';
@@ -18,7 +17,9 @@ import { db } from './lib/firebase';
 import { startMonthlyInvoiceCron } from './jobs/monthlyInvoices';
 import path from 'path';
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
