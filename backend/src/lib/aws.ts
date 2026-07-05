@@ -1131,7 +1131,6 @@ phases:
   build:
     commands:
       - echo "Building the Docker image..."
-      - cd app/${actualRootDir}
       - docker build -t $ECR_URI:latest -t $ECR_URI:$COMMIT_HASH .
     finally:
       - |
