@@ -1065,7 +1065,7 @@ phases:
             environment: {
                 type: "LINUX_CONTAINER",
                 image: "aws/codebuild/standard:7.0",
-                computeType: "BUILD_GENERAL1_SMALL",
+                computeType: "BUILD_GENERAL1_MEDIUM",
                 privilegedMode: true, // Needed for Docker build
             },
             source: {
